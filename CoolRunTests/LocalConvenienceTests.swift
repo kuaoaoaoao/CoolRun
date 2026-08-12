@@ -45,6 +45,25 @@ final class LocalConvenienceTests: XCTestCase {
         XCTAssertEqual(text, "cpu-true · memory-true")
     }
 
+    func testMenuBarRotationUsesSecondaryModeForRenderingAndLayout() {
+        let activeMode = MenuBarCompositionFormatter.activeMode(
+            style: .rotation,
+            primary: .cpu,
+            secondary: .network,
+            rotationUsesSecondary: true
+        )
+        let text = MenuBarCompositionFormatter.render(
+            style: .rotation,
+            primary: .cpu,
+            secondary: .network,
+            rotationUsesSecondary: true,
+            value: { mode, compact in "\(mode.rawValue)-\(compact)" }
+        )
+
+        XCTAssertEqual(activeMode, .network)
+        XCTAssertEqual(text, "network-false")
+    }
+
     func testSystemHistoryRetentionBounds() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let recentSample = SystemHistorySample(timestamp: now.addingTimeInterval(-60), cpuUsage: 0.2, memoryUsage: 0.3, storageUsage: 0.4, downloadSpeed: 1, uploadSpeed: 2, cpuTemperature: nil, gpuTemperature: nil)

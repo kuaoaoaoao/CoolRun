@@ -169,6 +169,27 @@ struct ModuleNavigationRail<Trailing: View>: View {
     }
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            navigationContent(showsSelectionTitle: true)
+                .fixedSize(horizontal: true, vertical: false)
+
+            navigationContent(showsSelectionTitle: false)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(4)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(AppTheme.chromeSurface(colorScheme))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(AppTheme.stroke(colorScheme), lineWidth: 0.5)
+        }
+        .shadow(color: AppTheme.shadow(colorScheme), radius: 8, y: 3)
+        .animation(.easeOut(duration: 0.12), value: hoveredMode)
+    }
+
+    private func navigationContent(showsSelectionTitle: Bool) -> some View {
         HStack(spacing: 3) {
             ForEach(ViewMode.allCases, id: \.self) { mode in
                 Button {
@@ -192,7 +213,7 @@ struct ModuleNavigationRail<Trailing: View>: View {
                                 }
                             }
 
-                        if selection == mode {
+                        if selection == mode, showsSelectionTitle {
                             Text(mode.displayName)
                                 .font(.caption.weight(.semibold))
                                 .lineLimit(1)
@@ -200,14 +221,20 @@ struct ModuleNavigationRail<Trailing: View>: View {
                                 .transition(.opacity.combined(with: .move(edge: .leading)))
                         }
                     }
-                    .frame(minWidth: selection == mode ? 28 : 24, minHeight: 32)
-                    .padding(.horizontal, selection == mode ? 5 : 0)
+                    .frame(
+                        minWidth: selection == mode ? (showsSelectionTitle ? 28 : 24) : 24,
+                        minHeight: 32
+                    )
+                    .padding(.horizontal, selection == mode ? (showsSelectionTitle ? 5 : 2) : 0)
                     .foregroundStyle(selection == mode ? AppTheme.accent : AppTheme.textSecondary(colorScheme))
                     .background {
                         if selection == mode {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(AppTheme.accent.opacity(colorScheme == .dark ? 0.20 : 0.13))
-                                .matchedGeometryEffect(id: "selected-module", in: selectionAnimation)
+                                .matchedGeometryEffect(
+                                    id: showsSelectionTitle ? "selected-module-titled" : "selected-module-compact",
+                                    in: selectionAnimation
+                                )
                         } else if hoveredMode == mode {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(AppTheme.accent.opacity(0.07))
@@ -232,17 +259,6 @@ struct ModuleNavigationRail<Trailing: View>: View {
             Spacer(minLength: 2)
             trailing
         }
-        .padding(4)
-        .background {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(AppTheme.chromeSurface(colorScheme))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(AppTheme.stroke(colorScheme), lineWidth: 0.5)
-        }
-        .shadow(color: AppTheme.shadow(colorScheme), radius: 8, y: 3)
-        .animation(.easeOut(duration: 0.12), value: hoveredMode)
     }
 }
 

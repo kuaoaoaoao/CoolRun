@@ -703,55 +703,75 @@ struct SettingsView: View {
             ) {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
-                        Image(systemName: "circle.circle")
+                        Image(systemName: "eye")
                             .foregroundStyle(.secondary)
                             .frame(width: 20)
-                        Text(LocalizedString.settings("coin_appearance"))
-                            .font(.system(size: 13))
-                        Spacer()
-                        Picker("", selection: $settings.menuBarCoinAppearance) {
-                            ForEach(MenuBarCoinAppearance.allCases) { appearance in
-                                Text(appearance.displayName(lang: settings.language)).tag(appearance)
-                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(LocalizedString.settings("show_coin_icon"))
+                                .font(.system(size: 13))
+                            Text(LocalizedString.settings("show_coin_icon_note"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
-                        .labelsHidden()
-                        .frame(width: 164)
+                        Spacer()
+                        Toggle("", isOn: $settings.showMenuBarCoinIcon)
+                            .labelsHidden()
                     }
 
-                    Divider().padding(.leading, 44)
+                    if settings.showMenuBarCoinIcon {
+                        Divider().padding(.leading, 44)
 
-                    HStack(spacing: 10) {
-                        Image(systemName: "wand.and.stars")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        Text(LocalizedString.settings("coin_motion"))
-                            .font(.system(size: 13))
-                        Spacer()
-                        Picker("", selection: $settings.menuBarCoinMotion) {
-                            ForEach(MenuBarCoinMotion.allCases) { motion in
-                                Text(motion.displayName(lang: settings.language)).tag(motion)
+                        HStack(spacing: 10) {
+                            Image(systemName: "circle.circle")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text(LocalizedString.settings("coin_appearance"))
+                                .font(.system(size: 13))
+                            Spacer()
+                            Picker("", selection: $settings.menuBarCoinAppearance) {
+                                ForEach(MenuBarCoinAppearance.allCases) { appearance in
+                                    Text(appearance.displayName(lang: settings.language)).tag(appearance)
+                                }
                             }
+                            .labelsHidden()
+                            .frame(width: 164)
                         }
-                        .labelsHidden()
-                        .frame(width: 164)
-                    }
 
-                    Divider().padding(.leading, 44)
+                        Divider().padding(.leading, 44)
 
-                    HStack(spacing: 10) {
-                        Image(systemName: "gauge.with.dots.needle.33percent")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        Text(LocalizedString.settings("animation_rate"))
-                            .font(.system(size: 13))
-                        Spacer()
-                        Picker("", selection: $settings.menuBarAnimationRate) {
-                            ForEach(MenuBarAnimationRate.allCases) { rate in
-                                Text(rate.displayName(lang: settings.language)).tag(rate)
+                        HStack(spacing: 10) {
+                            Image(systemName: "wand.and.stars")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text(LocalizedString.settings("coin_motion"))
+                                .font(.system(size: 13))
+                            Spacer()
+                            Picker("", selection: $settings.menuBarCoinMotion) {
+                                ForEach(MenuBarCoinMotion.allCases) { motion in
+                                    Text(motion.displayName(lang: settings.language)).tag(motion)
+                                }
                             }
+                            .labelsHidden()
+                            .frame(width: 164)
                         }
-                        .labelsHidden()
-                        .frame(width: 164)
+
+                        Divider().padding(.leading, 44)
+
+                        HStack(spacing: 10) {
+                            Image(systemName: "gauge.with.dots.needle.33percent")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text(LocalizedString.settings("animation_rate"))
+                                .font(.system(size: 13))
+                            Spacer()
+                            Picker("", selection: $settings.menuBarAnimationRate) {
+                                ForEach(MenuBarAnimationRate.allCases) { rate in
+                                    Text(rate.displayName(lang: settings.language)).tag(rate)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 164)
+                        }
                     }
                 }
                 .padding(.horizontal, 14)

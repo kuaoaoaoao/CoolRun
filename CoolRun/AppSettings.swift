@@ -55,6 +55,10 @@ class AppSettings: ObservableObject {
         didSet { userDefaults.set(menuBarAnimationRate.rawValue, forKey: "menubar_animation_rate") }
     }
 
+    @Published var showMenuBarCoinIcon: Bool {
+        didSet { userDefaults.set(showMenuBarCoinIcon, forKey: "menubar_show_coin_icon") }
+    }
+
     @Published var menuBarCoinMotion: MenuBarCoinMotion {
         didSet { userDefaults.set(menuBarCoinMotion.rawValue, forKey: "menubar_coin_motion") }
     }
@@ -233,6 +237,8 @@ class AppSettings: ObservableObject {
 
         let animationRaw = userDefaults.string(forKey: "menubar_animation_rate") ?? MenuBarAnimationRate.energySaving.rawValue
         self.menuBarAnimationRate = MenuBarAnimationRate(rawValue: animationRaw) ?? .energySaving
+
+        self.showMenuBarCoinIcon = userDefaults.object(forKey: "menubar_show_coin_icon") as? Bool ?? true
 
         let coinMotionRaw = userDefaults.string(forKey: "menubar_coin_motion") ?? MenuBarCoinMotion.classicFlip.rawValue
         self.menuBarCoinMotion = MenuBarCoinMotion(rawValue: coinMotionRaw) ?? .classicFlip
@@ -611,7 +617,9 @@ enum LocalizedString {
         case "refresh_rate_desc": return l(currentLang, en: "Lower rates reduce background CPU and power usage", zh: "降低频率可以减少后台 CPU 与耗电", ja: "頻度を下げるとバックグラウンドの CPU と電力を節約", ko: "빈도를 낮추면 백그라운드 CPU와 전력 사용량 감소")
         case "system_sampling": return l(currentLang, en: "System Sampling", zh: "系统采样", ja: "システムサンプリング", ko: "시스템 샘플링")
         case "menubar_animation": return l(currentLang, en: "Menu Bar Animation", zh: "菜单栏动画", ja: "メニューバーアニメーション", ko: "메뉴 막대 애니메이션")
-        case "menubar_animation_desc": return l(currentLang, en: "Choose the coin face, motion and smoothness", zh: "选择金币外观、动作和流畅度", ja: "コインの外観、動き、滑らかさを選択", ko: "동전 모양, 동작 및 부드러움 선택")
+        case "menubar_animation_desc": return l(currentLang, en: "Show or hide the coin, and customize its animation", zh: "显示或隐藏金币，并自定义动画效果", ja: "コインの表示・非表示とアニメーションを設定", ko: "동전 표시 여부와 애니메이션 설정")
+        case "show_coin_icon": return l(currentLang, en: "Show Coin Icon", zh: "显示金币图标", ja: "コインアイコンを表示", ko: "동전 아이콘 표시")
+        case "show_coin_icon_note": return l(currentLang, en: "Turn off to show only the menu bar text", zh: "关闭后菜单栏只显示金价等文字，更加隐蔽", ja: "オフにするとメニューバーにはテキストのみ表示されます", ko: "끄면 메뉴 막대에 텍스트만 표시됩니다")
         case "coin_animation": return l(currentLang, en: "Coin Animation", zh: "金币动画", ja: "コインアニメーション", ko: "코인 애니메이션")
         case "coin_appearance": return l(currentLang, en: "Coin Face", zh: "金币外观", ja: "コインの外観", ko: "동전 모양")
         case "coin_motion": return l(currentLang, en: "Coin Motion", zh: "金币动作", ja: "コインの動き", ko: "동전 동작")

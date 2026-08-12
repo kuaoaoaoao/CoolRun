@@ -301,6 +301,123 @@ final class InterfaceRenderTests: XCTestCase {
         )
     }
 
+    func testMenuBarShelfCompactRendersAtPopoverSize() throws {
+        try render(
+            MenuBarShelfView(layout: .compact)
+                .frame(width: 420, height: 236)
+                .environment(\.colorScheme, .light),
+            size: NSSize(width: 420, height: 236),
+            filename: "coolrun-menu-bar-shelf-preview.png"
+        )
+    }
+
+    func testMenuBarShelfManagementRendersFriendlyApplicationNames() throws {
+        let suiteName = "CoolRun.MenuBarShelfRenderTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let windows = [
+            MenuBarWindowSnapshot(
+                windowID: 1,
+                ownerPID: 42,
+                ownerBundleIdentifier: "com.apple.controlcenter",
+                ownerName: "Control Center",
+                title: "Battery",
+                frame: CGRect(x: 100, y: 0, width: 24, height: 24),
+                isOnScreen: true,
+                layer: Int(CGWindowLevelForKey(.statusWindow))
+            ),
+            MenuBarWindowSnapshot(
+                windowID: 2,
+                ownerPID: 42,
+                ownerBundleIdentifier: "com.apple.controlcenter",
+                ownerName: "Control Center",
+                title: "com.tencent.xinWeChat",
+                frame: CGRect(x: 140, y: 0, width: 24, height: 24),
+                isOnScreen: true,
+                layer: Int(CGWindowLevelForKey(.statusWindow))
+            ),
+            MenuBarWindowSnapshot(
+                windowID: 3,
+                ownerPID: 42,
+                ownerBundleIdentifier: "com.apple.controlcenter",
+                ownerName: "Control Center",
+                title: "com.tencent.qq",
+                frame: CGRect(x: 180, y: 0, width: 24, height: 24),
+                isOnScreen: true,
+                layer: Int(CGWindowLevelForKey(.statusWindow))
+            ),
+        ]
+        let store = MenuBarShelfStore(defaults: defaults, discovery: {
+            MenuBarWindowBridge.WindowListResult(
+                windows: windows,
+                usedPrivateDiscovery: true,
+                limitationReason: nil
+            )
+        }, runningApplicationDiscovery: {
+            [
+                MenuBarRunningApplicationSnapshot(
+                    processIdentifier: 44,
+                    bundleIdentifier: "com.tencent.xinWeChat",
+                    localizedName: "WeChat",
+                    bundleURL: URL(fileURLWithPath: "/Applications/WeChat.app"),
+                    kind: .regular
+                ),
+                MenuBarRunningApplicationSnapshot(
+                    processIdentifier: 45,
+                    bundleIdentifier: "com.tencent.qq",
+                    localizedName: "QQ",
+                    bundleURL: URL(fileURLWithPath: "/Applications/QQ.app"),
+                    kind: .regular
+                ),
+            ]
+        })
+        store.refresh()
+
+        try render(
+            MenuBarShelfView(layout: .management, store: store)
+                .frame(width: 304, height: 464)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, .light),
+            size: NSSize(width: 304, height: 464),
+            filename: "coolrun-menu-bar-shelf-management-preview.png"
+        )
+    }
+
+    func testMenuBarPermissionMismatchGuidanceRendersAtSettingsWidth() throws {
+        let suiteName = "CoolRun.MenuBarPermissionRenderTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = MenuBarShelfStore(
+            defaults: defaults,
+            discovery: {
+                MenuBarWindowBridge.WindowListResult(
+                    windows: [],
+                    usedPrivateDiscovery: true,
+                    limitationReason: nil
+                )
+            },
+            runningApplicationDiscovery: { [] }
+        )
+        let permissions = MenuBarShelfPermissions(
+            accessibilityProbe: { false },
+            screenCaptureProbe: { true },
+            applicationIdentity: MenuBarShelfApplicationIdentity(
+                bundlePath: "/Applications/CoolRun.app",
+                usesAdHocSignature: true
+            ),
+            notificationCenter: NotificationCenter()
+        )
+
+        try render(
+            MenuBarShelfSettingsPanel(store: store, permissions: permissions)
+                .frame(width: 520, height: 300, alignment: .top)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, .light),
+            size: NSSize(width: 520, height: 300),
+            filename: "coolrun-menu-bar-permission-settings-preview.png"
+        )
+    }
+
     private func render<Content: View>(
         _ content: Content,
         size: NSSize,

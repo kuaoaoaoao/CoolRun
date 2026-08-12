@@ -37,14 +37,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
         if let button = statusItem.button {
             button.imagePosition = .imageLeft
-            button.image = CoinIconRenderer.image(
-                phase: coinPhase,
-                motion: settings.menuBarCoinMotion,
-                appearance: settings.menuBarCoinAppearance
-            )
+            button.image = settings.showMenuBarCoinIcon
+                ? CoinIconRenderer.image(
+                    phase: coinPhase,
+                    motion: settings.menuBarCoinMotion,
+                    appearance: settings.menuBarCoinAppearance
+                )
+                : nil
             button.font = Self.statusTitleFont
             button.lineBreakMode = .byTruncatingTail
-            button.title = " \(goldPriceText)"
+            button.title = settings.showMenuBarCoinIcon ? " \(goldPriceText)" : goldPriceText
             button.action = #selector(handleStatusItemClick)
             button.target = self
             button.sendAction(on: [.leftMouseDown, .rightMouseDown])
@@ -195,6 +197,15 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
             }
             .store(in: &cancellables)
 
+        settings.$showMenuBarCoinIcon
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.coinPhase = 0
+                self?.startIconAnimation()
+            }
+            .store(in: &cancellables)
+
         settings.$menuBarCoinMotion
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -274,7 +285,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         if contextPopover.isShown {
             contextPopover.performClose(nil)
         }
-
         if popover.isShown {
             if popoverPinState.isPinned {
                 // pin 状态下点图标也给反馈：解除 pin 并收起弹窗，而不是无响应
@@ -356,9 +366,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
     func popoverDidClose(_ notification: Notification) {
         guard
-            let closedPopover = notification.object as? NSPopover,
-            closedPopover === popover
+            let closedPopover = notification.object as? NSPopover
         else { return }
+
+        guard closedPopover === popover else { return }
 
         // NSPopover 会保留 hosting controller；显式停止，避免关闭后仍轮询 AI 接口。
         codexViewModel.stop()
@@ -444,9 +455,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     private func startIconAnimation() {
         iconTimer?.invalidate()
         iconTimer = nil
-        activeAnimationFramesPerSecond = settings.menuBarAnimationRate.framesPerSecond
+        activeAnimationFramesPerSecond = settings.showMenuBarCoinIcon
+            ? settings.menuBarAnimationRate.framesPerSecond
+            : nil
 
-        if activeAnimationFramesPerSecond == nil {
+        if !settings.showMenuBarCoinIcon {
+            coinPhase = 0
+            statusItem?.button?.image = nil
+        } else if activeAnimationFramesPerSecond == nil {
             coinPhase = 0
             statusItem?.button?.image = CoinIconRenderer.image(
                 phase: coinPhase,
@@ -472,7 +488,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
     @MainActor
     private func refreshIcon() {
-        if let framesPerSecond = activeAnimationFramesPerSecond {
+        if !settings.showMenuBarCoinIcon {
+            statusItem?.button?.image = nil
+        } else if let framesPerSecond = activeAnimationFramesPerSecond {
             let cpuUsage = min(max(viewModel.snapshot.cpu.usage, 0), 1)
             let revolutionsPerSecond = (0.35 + cpuUsage * 2.15) * settings.menuBarCoinMotion.speedMultiplier
             coinPhase = (coinPhase + (.pi * 2 * revolutionsPerSecond / framesPerSecond))
@@ -500,13 +518,19 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
                 self?.menuBarValue(for: mode, compact: compact) ?? "--"
             }
         )
-        let nextTitle = " \(rendered)"
+        let nextTitle = settings.showMenuBarCoinIcon ? " \(rendered)" : rendered
+        let activeMode = MenuBarCompositionFormatter.activeMode(
+            style: settings.menuBarCompositionStyle,
+            primary: settings.menuBarDisplayMode,
+            secondary: settings.menuBarSecondaryDisplayMode,
+            rotationUsesSecondary: rotationUsesSecondary
+        )
 
-        let compactTitle = compactStatusText(nextTitle, limit: statusTitleLimit)
+        let compactTitle = compactStatusText(nextTitle, limit: statusTitleLimit(for: activeMode))
         if statusItem?.button?.title != compactTitle {
             statusItem?.button?.title = compactTitle
         }
-        updateStatusItemLength(for: compactTitle)
+        updateStatusItemLength(for: compactTitle, activeMode: activeMode)
     }
 
     private func menuBarValue(for mode: MenuBarDisplayMode, compact: Bool) -> String {
@@ -576,9 +600,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         return "\(prefix)…"
     }
 
-    private var statusTitleLimit: Int {
+    private func statusTitleLimit(for mode: MenuBarDisplayMode) -> Int {
         if settings.menuBarCompositionStyle == .pair { return 24 }
-        switch settings.menuBarDisplayMode {
+        switch mode {
         case .goldPrice: return 18
         case .date: return 12
         case .cpu, .memory: return 8
@@ -589,19 +613,31 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         }
     }
 
-    private func updateStatusItemLength(for title: String? = nil) {
+    private func updateStatusItemLength(
+        for title: String? = nil,
+        activeMode: MenuBarDisplayMode? = nil
+    ) {
         guard let button = statusItem?.button else { return }
         let displayTitle = title ?? button.title
+        let mode = activeMode ?? MenuBarCompositionFormatter.activeMode(
+            style: settings.menuBarCompositionStyle,
+            primary: settings.menuBarDisplayMode,
+            secondary: settings.menuBarSecondaryDisplayMode,
+            rotationUsesSecondary: rotationUsesSecondary
+        )
         let titleWidth = displayTitle.size(withAttributes: [.font: button.font ?? Self.statusTitleFont]).width
         let imageWidth = button.image.map { $0.size.width + 4 } ?? 0
         let measuredLength = ceil(titleWidth + imageWidth + 14)
-        let length = min(max(measuredLength, minimumStatusItemLength), maximumStatusItemLength)
+        let length = min(
+            max(measuredLength, minimumStatusItemLength(for: mode)),
+            maximumStatusItemLength(for: mode)
+        )
         statusItem?.length = length
     }
 
-    private var minimumStatusItemLength: CGFloat {
+    private func minimumStatusItemLength(for mode: MenuBarDisplayMode) -> CGFloat {
         if settings.menuBarCompositionStyle == .pair { return 118 }
-        switch settings.menuBarDisplayMode {
+        switch mode {
         case .goldPrice: return 76
         case .date: return 82
         case .cpu, .memory: return 72
@@ -612,9 +648,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         }
     }
 
-    private var maximumStatusItemLength: CGFloat {
+    private func maximumStatusItemLength(for mode: MenuBarDisplayMode) -> CGFloat {
         if settings.menuBarCompositionStyle == .pair { return 184 }
-        switch settings.menuBarDisplayMode {
+        switch mode {
         case .goldPrice: return 132
         case .date: return 124
         case .cpu, .memory: return 84
