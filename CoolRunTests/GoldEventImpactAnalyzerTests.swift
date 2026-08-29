@@ -141,4 +141,119 @@ final class GoldEventImpactAnalyzerTests: XCTestCase {
         XCTAssertEqual(impact.direction, .bullish)
         XCTAssertEqual(impact.volatilityRisk, .high)
     }
+
+    // MARK: - 中文场景（自旧局势感知测试迁移；不再断言交易动作）
+
+    func testWarshHawkishChineseScenarioIsBearishWithoutTradeAction() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let items = [
+            GoldNewsItem(
+                title: "美联储主席沃什在杰克逊霍尔发表鹰派演讲，加息预期升温",
+                source: "证券时报",
+                link: URL(string: "https://stcn.com/example"),
+                publishedAt: now.addingTimeInterval(-600),
+                sentimentScore: -36
+            )
+        ]
+        let macro = GoldMacroSnapshot(
+            tenYearYield: 4.72,
+            tenYearYieldChangeBps: 5.6,
+            observedAt: now
+        )
+        let global = GoldGlobalSnapshot(
+            xauUsd: 4_454.52,
+            xauPrevClose: 4_601.30,
+            usdCny: 7.10,
+            dollarIndex: 99.71,
+            updatedAt: now
+        )
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: items,
+                macro: macro,
+                globalSnapshot: global,
+                dataState: .live,
+                now: now
+            ),
+            language: .chinese
+        )
+
+        XCTAssertEqual(impact.direction, .bearish)
+        XCTAssertEqual(impact.confidence, .high)
+        XCTAssertTrue(impact.evidence.contains {
+            $0.kind == .centralBankStatement && $0.state == .observed
+        })
+        // 事件影响只负责解释：标题不得出现买卖动作
+        XCTAssertFalse(impact.headline.contains("减仓"))
+        XCTAssertFalse(impact.headline.contains("卖出"))
+        XCTAssertFalse(impact.headline.contains("持有"))
+    }
+
+    func testDovishChineseScenarioIsBullish() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let items = [
+            GoldNewsItem(
+                title: "美联储释放鸽派信号，降息预期升温",
+                source: "凤凰财经",
+                link: URL(string: "https://ifeng.com/example"),
+                publishedAt: now.addingTimeInterval(-600),
+                sentimentScore: 36
+            )
+        ]
+        let macro = GoldMacroSnapshot(
+            tenYearYield: 4.31,
+            tenYearYieldChangeBps: -4.2,
+            observedAt: now
+        )
+        let global = GoldGlobalSnapshot(
+            xauUsd: 4_612.00,
+            xauPrevClose: 4_560.00,
+            usdCny: 7.10,
+            dollarIndex: 98.20,
+            updatedAt: now
+        )
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: items,
+                macro: macro,
+                globalSnapshot: global,
+                dataState: .live,
+                now: now
+            ),
+            language: .chinese
+        )
+
+        XCTAssertEqual(impact.direction, .bullish)
+        XCTAssertEqual(impact.confidence, .high)
+    }
+
+    func testNeutralChineseNewsFailsClosedWithoutEvidence() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let items = [
+            GoldNewsItem(
+                title: "黄金市场横盘整理，方向不明",
+                source: "证券时报",
+                link: nil,
+                publishedAt: now.addingTimeInterval(-600),
+                sentimentScore: 0
+            )
+        ]
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: items,
+                macro: nil,
+                globalSnapshot: nil,
+                dataState: .live,
+                now: now
+            ),
+            language: .chinese
+        )
+
+        XCTAssertEqual(impact.direction, .neutral)
+        XCTAssertEqual(impact.confidence, .unavailable)
+        XCTAssertTrue(impact.evidence.isEmpty)
+    }
 }

@@ -117,6 +117,11 @@ final class GoldMarketContextService {
         self.session = session
     }
 
+    /// 单测隔离用：清空进程级缓存，避免用例间互相污染。
+    static func resetCacheForTesting() async {
+        await cache.reset()
+    }
+
     func fetchContext(
         now: Date = Date(),
         language: AppLanguage
@@ -334,6 +339,10 @@ private actor GoldMarketContextMemoryCache {
 
     func save(_ context: GoldMarketContext) {
         cachedContext = context.markedAsCache(false)
+    }
+
+    func reset() {
+        cachedContext = nil
     }
 }
 

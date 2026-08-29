@@ -42,30 +42,35 @@ final class GoldAnalysisViewModel {
     private(set) var marketContext: GoldMarketContext?
     private(set) var candles: [GoldCandlestick] = []
     private(set) var isLoading = false
-    private(set) var isMarketContextLoading = false
     // 官方走势与多平台金价
     private(set) var remoteChartPoints: [GoldPriceRecord] = []
     private(set) var remoteChartRange: GoldChartRange?
     private(set) var isRemoteChartLoading = false
     private(set) var multiSourcePrices: [GoldMultiSourcePrice] = []
-    // 国际市场参考（失败置 nil，卡片隐藏）
+    // 统一宏观情报：单一快照写入 marketIntelligence / marketContext / globalSnapshot
     private(set) var globalSnapshot: GoldGlobalSnapshot?
-    // 局势感知（针对 stcn.com / ifeng.com 等爬取的宏观局势判断，失败置 nil 卡片隐藏）
-    private(set) var situationAssessment: GoldSituationAssessment?
-    private(set) var isSituationLoading = false
+    private(set) var marketIntelligence: GoldMarketIntelligenceSnapshot?
+    private(set) var isMarketIntelligenceLoading = false
 
-    private let marketContextService = GoldMarketContextService()
-    private let situationService = GoldSituationAwarenessService.shared
+    /// 事件影响解释，只用于展示，不参与策略加权
+    var eventImpact: GoldEventImpact? {
+        marketIntelligence?.eventImpact
+    }
+
+    private let marketIntelligenceService: any GoldMarketIntelligenceProviding
     private let marketDataService = GoldMarketDataService.shared
-    private let globalMarketService = GoldGlobalMarketService.shared
     private let learningStore = GoldPredictionLearningStore.shared
     private var analysisTask: Task<Void, Never>?
-    private var marketContextTask: Task<Void, Never>?
     private var remoteChartTask: Task<Void, Never>?
     private var multiSourceTask: Task<Void, Never>?
-    private var globalMarketTask: Task<Void, Never>?
-    private var situationTask: Task<Void, Never>?
+    private var marketIntelligenceTask: Task<Void, Never>?
     private var lastRecordsSignature = ""
+
+    init(
+        marketIntelligenceService: any GoldMarketIntelligenceProviding = GoldMarketIntelligenceService()
+    ) {
+        self.marketIntelligenceService = marketIntelligenceService
+    }
 
     func refresh(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
         let contextSnapshot = marketContext
@@ -105,20 +110,23 @@ final class GoldAnalysisViewModel {
         }
     }
 
-    func refreshMarketContext(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
-        guard !isMarketContextLoading else { return }
-        isMarketContextLoading = true
-        marketContextTask?.cancel()
+    /// 统一宏观刷新：一次请求写入 marketIntelligence / marketContext / globalSnapshot，
+    /// eventImpact 只作为解释展示，不改变策略输入。
+    func refreshMarketIntelligence(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
+        marketIntelligenceTask?.cancel()
+        isMarketIntelligenceLoading = true
 
-        let service = marketContextService
+        let service = marketIntelligenceService
         // 在 MainActor 捕获语言后再传入异步服务
         let language = AppSettings.shared.language
-        marketContextTask = Task { [weak self] in
-            let context = try? await service.fetchContext(language: language)
+        marketIntelligenceTask = Task { [weak self] in
+            let snapshot = await service.fetchSnapshot(now: Date(), language: language)
             guard !Task.isCancelled else { return }
 
-            self?.marketContext = context
-            self?.isMarketContextLoading = false
+            self?.marketIntelligence = snapshot
+            self?.marketContext = snapshot.context
+            self?.globalSnapshot = snapshot.globalSnapshot
+            self?.isMarketIntelligenceLoading = false
             self?.lastRecordsSignature = ""
             self?.refresh(records: records, candlePeriod: candlePeriod)
         }
@@ -174,49 +182,19 @@ final class GoldAnalysisViewModel {
         }
     }
 
-    // 国际市场参考（新浪行情，失败时静默隐藏卡片）
-    func refreshGlobalMarket() {
-        globalMarketTask?.cancel()
-        let service = globalMarketService
-        globalMarketTask = Task { [weak self] in
-            let snapshot = try? await service.fetchSnapshot()
-            guard !Task.isCancelled else { return }
-            self?.globalSnapshot = snapshot
-        }
-    }
-
-    // 局势感知（针对 stcn.com / ifeng.com 爬取宏观新闻，给出持有/卖出判断与风险规避，失败时静默隐藏卡片）
-    func refreshSituationAwareness() {
-        guard !isSituationLoading else { return }
-        isSituationLoading = true
-        situationTask?.cancel()
-        let service = situationService
-        situationTask = Task { [weak self] in
-            let assessment = await service.fetchAssessment()
-            guard !Task.isCancelled else { return }
-            self?.situationAssessment = assessment
-            self?.isSituationLoading = false
-        }
-    }
-
     func cancel() {
         analysisTask?.cancel()
         analysisTask = nil
-        marketContextTask?.cancel()
-        marketContextTask = nil
         remoteChartTask?.cancel()
         remoteChartTask = nil
         multiSourceTask?.cancel()
         multiSourceTask = nil
-        globalMarketTask?.cancel()
-        globalMarketTask = nil
-        situationTask?.cancel()
-        situationTask = nil
+        marketIntelligenceTask?.cancel()
+        marketIntelligenceTask = nil
         lastRecordsSignature = ""
         isLoading = false
-        isMarketContextLoading = false
+        isMarketIntelligenceLoading = false
         isRemoteChartLoading = false
-        isSituationLoading = false
     }
 
     private func apply(_ result: GoldAnalysisResult, sourceRecords: [GoldPriceRecord]) {
@@ -549,13 +527,10 @@ struct GoldAnalysisView: View {
                         )
                     }
 
-                    // 局势感知：加载中或有结果时展示（失败静默隐藏）
-                    if viewModel.isSituationLoading || viewModel.situationAssessment != nil {
-                        SituationAwarenessCard(
-                            assessment: viewModel.situationAssessment,
-                            isLoading: viewModel.isSituationLoading
-                        )
-                    }
+                    EventImpactCard(
+                        impact: viewModel.eventImpact,
+                        isLoading: viewModel.isMarketIntelligenceLoading
+                    )
 
                     GoldPositionCard(
                         gramsText: $holdingGramsText,
@@ -583,11 +558,9 @@ struct GoldAnalysisView: View {
         }
         .task {
             viewModel.refresh(records: store.records, candlePeriod: candlePeriod)
-            viewModel.refreshMarketContext(records: store.records, candlePeriod: candlePeriod)
+            viewModel.refreshMarketIntelligence(records: store.records, candlePeriod: candlePeriod)
             viewModel.refreshRemoteChart(range: chartRange)
             viewModel.refreshMultiSourcePrices()
-            viewModel.refreshGlobalMarket()
-            viewModel.refreshSituationAwareness()
         }
         .task {
             // 定时重新评估数据健康度，网络长时间失败时健康徽标也能变为"陈旧"
@@ -638,7 +611,7 @@ struct GoldAnalysisView: View {
                     AdvancedStrategyCard(report: advancedReport)
                     MarketContextCard(
                         context: advancedReport.marketContext,
-                        isLoading: viewModel.isMarketContextLoading
+                        isLoading: viewModel.isMarketIntelligenceLoading
                     )
                     PredictionLearningCard(
                         summary: learningStore.summary,
@@ -1040,10 +1013,9 @@ struct GoldAnalysisView: View {
                 await delegate.refreshGoldPriceNow()
             }
             viewModel.refresh(records: store.records, candlePeriod: candlePeriod)
+            viewModel.refreshMarketIntelligence(records: store.records, candlePeriod: candlePeriod)
             viewModel.refreshRemoteChart(range: chartRange)
             viewModel.refreshMultiSourcePrices()
-            viewModel.refreshGlobalMarket()
-            viewModel.refreshSituationAwareness()
             isManualRefreshing = false
         }
     }
@@ -2037,278 +2009,6 @@ private struct AdvancedStrategyHeader: View {
 
 }
 
-private struct SituationAwarenessCard: View {
-    let assessment: GoldSituationAssessment?
-    let isLoading: Bool
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var isExpanded = true
-
-    private var tint: Color {
-        guard let assessment else { return AppTheme.gold }
-        switch assessment.riskLevel {
-        case .low: return AppTheme.healthy
-        case .elevated: return AppTheme.warning
-        case .high: return AppTheme.critical
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-
-            if let assessment {
-                actionRow(assessment)
-
-                Text(assessment.headline)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if !assessment.transmissionChain.isEmpty {
-                    transmissionChainView(assessment.transmissionChain)
-                }
-
-                if !assessment.riskWarnings.isEmpty {
-                    warningsView(assessment.riskWarnings)
-                }
-
-                if !assessment.newsItems.isEmpty {
-                    Divider().opacity(0.45)
-
-                    DisclosureGroup(isExpanded: $isExpanded) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(Array(assessment.newsItems.prefix(8))) { item in
-                                newsRow(item)
-                            }
-                        }
-                        .padding(.top, 4)
-                    } label: {
-                        Label(
-                            String(
-                                format: LocalizedString.l(
-                                    AppSettings.shared.language,
-                                    en: "Supporting news (%d)",
-                                    zh: "支撑新闻 (%d)",
-                                    ja: "根拠ニュース (%d)",
-                                    ko: "근거 뉴스 (%d)"
-                                ),
-                                assessment.newsItems.count
-                            ),
-                            systemImage: "newspaper.fill"
-                        )
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                    }
-                    .tint(AppTheme.textSecondary(colorScheme))
-                }
-            } else {
-                Text(
-                    isLoading
-                        ? LocalizedString.l(
-                            AppSettings.shared.language,
-                            en: "Sensing macro situation…",
-                            zh: "正在感知宏观局势…",
-                            ja: "マクロ状況を感知中…",
-                            ko: "거시 상황 감지 중…"
-                        )
-                        : LocalizedString.l(
-                            AppSettings.shared.language,
-                            en: "Situation awareness unavailable",
-                            zh: "局势感知暂不可用",
-                            ja: "状況認識は利用できません",
-                            ko: "상황 인식을 사용할 수 없습니다"
-                        )
-                )
-                .font(.system(size: 10))
-                .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(10)
-        .background(colorScheme == .dark ? Color.black.opacity(0.25) : Color.white.opacity(0.48))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tint.opacity(0.22), lineWidth: 1)
-        }
-    }
-
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label(
-                LocalizedString.l(
-                    AppSettings.shared.language,
-                    en: "Situation Awareness",
-                    zh: "局势感知",
-                    ja: "状況認識",
-                    ko: "상황 인식"
-                ),
-                systemImage: "satellite.fill"
-            )
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(tint)
-
-            Spacer(minLength: 6)
-
-            if isLoading {
-                ProgressView().controlSize(.small)
-            } else if let assessment {
-                Text(assessment.riskLevel.title)
-                    .font(.system(size: 10, weight: .bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(tint.opacity(0.16))
-                    .foregroundStyle(tint)
-                    .clipShape(Capsule())
-            }
-        }
-    }
-
-    private func actionRow(_ assessment: GoldSituationAssessment) -> some View {
-        HStack(spacing: 8) {
-            Label(assessment.action.title, systemImage: assessment.action.systemImage)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(tint)
-                .clipShape(Capsule())
-
-            HStack(spacing: 4) {
-                scorePill(
-                    LocalizedString.l(AppSettings.shared.language, en: "Hawkish", zh: "鹰派", ja: "タカ派", ko: "매파"),
-                    value: assessment.hawkishScore,
-                    color: AppTheme.critical
-                )
-                scorePill(
-                    LocalizedString.l(AppSettings.shared.language, en: "Dovish", zh: "鸽派", ja: "ハト派", ko: "비둘기"),
-                    value: assessment.dovishScore,
-                    color: AppTheme.healthy
-                )
-            }
-
-            Spacer(minLength: 0)
-
-            if assessment.isFromCache {
-                Image(systemName: "clock.badge.checkmark")
-                    .font(.system(size: 9))
-                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
-            }
-        }
-    }
-
-    private func scorePill(_ title: String, value: Double, color: Color) -> some View {
-        VStack(spacing: 1) {
-            Text(title)
-                .font(.system(size: 8, weight: .medium))
-            Text(value.shortNumber)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .monospacedDigit()
-        }
-        .foregroundStyle(color)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
-
-    private func transmissionChainView(_ chain: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(chain.enumerated()), id: \.offset) { index, step in
-                HStack(alignment: .top, spacing: 6) {
-                    VStack(spacing: 2) {
-                        Circle()
-                            .fill(tint)
-                            .frame(width: 6, height: 6)
-                            .padding(.top, 3)
-                        if index < chain.count - 1 {
-                            Rectangle()
-                                .fill(tint.opacity(0.3))
-                                .frame(width: 1)
-                                .frame(maxHeight: .infinity)
-                        }
-                    }
-                    Text(step)
-                        .font(.system(size: 10))
-                        .foregroundStyle(AppTheme.textPrimary(colorScheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.bottom, index < chain.count - 1 ? 6 : 0)
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(8)
-        .background(tint.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-
-    private func warningsView(_ warnings: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach(Array(warnings.prefix(3)), id: \.self) { warning in
-                Label {
-                    Text(warning)
-                        .font(.system(size: 10))
-                        .foregroundStyle(AppTheme.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(AppTheme.warning)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func newsRow(_ item: GoldNewsItem) -> some View {
-        let content = HStack(alignment: .top, spacing: 6) {
-            Circle()
-                .fill(newsTint(item))
-                .frame(width: 5, height: 5)
-                .padding(.top, 4)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 4) {
-                    if let source = item.source, !source.isEmpty {
-                        Text(source)
-                    }
-                    if let publishedAt = item.publishedAt {
-                        Text(publishedAt, style: .relative)
-                    }
-                }
-                .font(.system(size: 8))
-                .foregroundStyle(AppTheme.textSecondary(colorScheme))
-            }
-
-            Spacer(minLength: 0)
-
-            if item.link != nil {
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
-            }
-        }
-
-        if let link = item.link {
-            Link(destination: link) { content }.buttonStyle(.plain)
-        } else {
-            content
-        }
-    }
-
-    private func newsTint(_ item: GoldNewsItem) -> Color {
-        if item.sentimentScore > 0 { return AppTheme.healthy }
-        if item.sentimentScore < 0 { return AppTheme.critical }
-        return AppTheme.textSecondary(colorScheme)
-    }
-}
-
 private struct MarketContextCard: View {
     let context: GoldMarketContext?
     let isLoading: Bool
@@ -2474,6 +2174,420 @@ private struct MarketContextCard: View {
             return String(format: context.isFromCache ? LocalizedString.gold("cached_data_format") : LocalizedString.gold("partial_data_format"), missing)
         }
         return context.isFromCache ? LocalizedString.gold("cached_15min") : LocalizedString.gold("macro_partial")
+    }
+}
+
+// MARK: - 事件影响
+
+/// 事件影响卡片的纯文案映射：只做展示文本转换，不做任何推断或加权。
+struct GoldEventImpactPresentation: Equatable {
+    let directionText: String
+    let confidenceText: String
+    let dataStateText: String
+    let riskText: String
+
+    nonisolated init(impact: GoldEventImpact, language: AppLanguage) {
+        directionText = Self.directionText(for: impact.direction, dataState: impact.dataState, language: language)
+        confidenceText = LocalizedString.l(
+            language,
+            en: "Evidence strength: \(Self.confidenceWord(impact.confidence, language: .english))",
+            zh: "证据强度：\(Self.confidenceWord(impact.confidence, language: .chinese))",
+            ja: "証拠強度：\(Self.confidenceWord(impact.confidence, language: .japanese))",
+            ko: "증거 강도: \(Self.confidenceWord(impact.confidence, language: .korean))"
+        )
+        dataStateText = Self.dataStateText(for: impact.dataState, language: language)
+        riskText = LocalizedString.l(
+            language,
+            en: "Volatility risk: \(Self.riskWord(impact.volatilityRisk, language: .english))",
+            zh: "波动风险：\(Self.riskWord(impact.volatilityRisk, language: .chinese))",
+            ja: "ボラティリティリスク：\(Self.riskWord(impact.volatilityRisk, language: .japanese))",
+            ko: "변동성 리스크: \(Self.riskWord(impact.volatilityRisk, language: .korean))"
+        )
+    }
+
+    nonisolated static func evidenceLabel(for state: GoldEvidenceState, language: AppLanguage) -> String {
+        switch state {
+        case .observed:
+            return LocalizedString.l(
+                language,
+                en: "Confirmed",
+                zh: "已确认",
+                ja: "確認済み",
+                ko: "확인됨"
+            )
+        case .inferred:
+            return LocalizedString.l(
+                language,
+                en: "Inferred",
+                zh: "推断",
+                ja: "推論",
+                ko: "추론"
+            )
+        }
+    }
+
+    nonisolated private static func directionText(
+        for direction: GoldImpactDirection,
+        dataState: GoldIntelligenceDataState,
+        language: AppLanguage
+    ) -> String {
+        guard dataState != .unavailable else {
+            return LocalizedString.l(
+                language,
+                en: "No direction yet",
+                zh: "暂无方向",
+                ja: "方向なし",
+                ko: "방향 없음"
+            )
+        }
+        switch direction {
+        case .bullish:
+            return LocalizedString.l(language, en: "Short-term bullish", zh: "短线偏多", ja: "短期強気", ko: "단기 강세")
+        case .bearish:
+            return LocalizedString.l(language, en: "Short-term bearish", zh: "短线偏空", ja: "短期弱気", ko: "단기 약세")
+        case .neutral:
+            return LocalizedString.l(language, en: "Short-term neutral", zh: "短线中性", ja: "短期中立", ko: "단기 중립")
+        }
+    }
+
+    nonisolated private static func confidenceWord(
+        _ confidence: GoldImpactConfidence,
+        language: AppLanguage
+    ) -> String {
+        switch confidence {
+        case .unavailable:
+            return LocalizedString.l(language, en: "unavailable", zh: "不可用", ja: "利用不可", ko: "사용 불가")
+        case .low:
+            return LocalizedString.l(language, en: "low", zh: "低", ja: "低", ko: "낮음")
+        case .medium:
+            return LocalizedString.l(language, en: "medium", zh: "中", ja: "中", ko: "보통")
+        case .high:
+            return LocalizedString.l(language, en: "high", zh: "高", ja: "高", ko: "높음")
+        }
+    }
+
+    nonisolated private static func dataStateText(
+        for dataState: GoldIntelligenceDataState,
+        language: AppLanguage
+    ) -> String {
+        switch dataState {
+        case .live:
+            return LocalizedString.l(language, en: "Live data", zh: "实时数据", ja: "リアルタイムデータ", ko: "실시간 데이터")
+        case .partial:
+            return LocalizedString.l(language, en: "Incomplete data", zh: "数据不完整", ja: "不完全なデータ", ko: "불완전한 데이터")
+        case .stale:
+            return LocalizedString.l(language, en: "Cached data", zh: "缓存数据", ja: "キャッシュデータ", ko: "캐시 데이터")
+        case .unavailable:
+            return LocalizedString.l(language, en: "Data unavailable", zh: "数据不可用", ja: "データ利用不可", ko: "데이터 사용 불가")
+        }
+    }
+
+    nonisolated private static func riskWord(
+        _ risk: GoldVolatilityRisk,
+        language: AppLanguage
+    ) -> String {
+        switch risk {
+        case .normal:
+            return LocalizedString.l(language, en: "normal", zh: "正常", ja: "通常", ko: "보통")
+        case .elevated:
+            return LocalizedString.l(language, en: "elevated", zh: "升高", ja: "上昇", ko: "높아짐")
+        case .high:
+            return LocalizedString.l(language, en: "high", zh: "高", ja: "高い", ko: "높음")
+        }
+    }
+}
+
+// MARK: - 事件影响卡片
+
+/// 展示事件影响引擎的方向、置信度、波动风险、证据链与反方风险。
+/// 只负责解释，不生成任何交易动作（买入/卖出/减仓等），也不参与策略加权。
+struct EventImpactCard: View {
+    let impact: GoldEventImpact?
+    let isLoading: Bool
+
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var language: AppLanguage { settings.language }
+
+    private var presentation: GoldEventImpactPresentation? {
+        guard let impact else { return nil }
+        return GoldEventImpactPresentation(impact: impact, language: language)
+    }
+
+    private var directionTint: Color {
+        switch impact?.direction ?? .neutral {
+        case .bullish: AppTheme.healthy
+        case .neutral: Color(red: 0.88, green: 0.57, blue: 0.16)
+        case .bearish: AppTheme.critical
+        }
+    }
+
+    /// 默认展开的 observed / inferred 条数上限，其余折叠进 DisclosureGroup。
+    private static let maxExpandedObserved = 3
+    private static let maxExpandedInferred = 2
+
+    private var observedEvidence: [GoldEventEvidence] {
+        (impact?.evidence ?? []).filter { $0.state == .observed }
+    }
+
+    private var inferredEvidence: [GoldEventEvidence] {
+        (impact?.evidence ?? []).filter { $0.state == .inferred }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+
+            if let impact, let presentation {
+                metricRow(presentation)
+
+                stateBadge(impact)
+
+                Text(impact.headline)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !observedEvidence.isEmpty {
+                    Divider().opacity(0.45)
+                    evidenceSection(
+                        state: .observed,
+                        items: observedEvidence,
+                        expandedLimit: Self.maxExpandedObserved
+                    )
+                }
+
+                if !inferredEvidence.isEmpty {
+                    if observedEvidence.isEmpty { Divider().opacity(0.45) }
+                    evidenceSection(
+                        state: .inferred,
+                        items: inferredEvidence,
+                        expandedLimit: Self.maxExpandedInferred
+                    )
+                }
+
+                if !impact.counterRisks.isEmpty {
+                    Divider().opacity(0.45)
+                    counterRiskSection(impact.counterRisks)
+                }
+            } else {
+                Text(
+                    isLoading
+                        ? LocalizedString.l(language, en: "Loading event impact…", zh: "正在获取事件影响…", ja: "イベント影響を取得中…", ko: "이벤트 영향을 가져오는 중…")
+                        : LocalizedString.l(language, en: "Event impact is unavailable", zh: "事件影响数据暂不可用", ja: "イベント影響データを利用できません", ko: "이벤트 영향 데이터를 사용할 수 없습니다")
+                )
+                .font(.system(size: 10))
+                .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(LocalizedString.l(
+                language,
+                en: "Event impact is a logical analysis of public data, not investment advice.",
+                zh: "事件影响为基于公开数据的逻辑分析，不构成投资建议。",
+                ja: "イベント影響は公開データに基づく論理分析であり、投資助言ではありません。",
+                ko: "이벤트 영향은 공개 데이터 기반의 논리적 분석이며, 투자 조언이 아닙니다."
+            ))
+            .font(.system(size: 8))
+            .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(colorScheme == .dark ? Color.black.opacity(0.25) : Color.white.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(directionTint.opacity(0.18), lineWidth: 1)
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(
+                LocalizedString.l(language, en: "Event impact", zh: "事件影响", ja: "イベント影響", ko: "이벤트 영향"),
+                systemImage: "bolt.horizontal"
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(directionTint)
+
+            Spacer(minLength: 6)
+
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+            } else if let updatedAt = impact?.updatedAt {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(LocalizedString.l(language, en: "As of ", zh: "数据截至 ", ja: "データ時点 ", ko: "데이터 기준 "))
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    Text(updatedAt, style: .time)
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                }
+            }
+        }
+    }
+
+    private func metricRow(_ presentation: GoldEventImpactPresentation) -> some View {
+        HStack(spacing: 6) {
+            metricChip(text: presentation.directionText, tint: directionTint)
+            Spacer(minLength: 0)
+            metricChip(text: presentation.confidenceText, tint: AppTheme.textPrimary(colorScheme))
+            Spacer(minLength: 0)
+            metricChip(text: presentation.riskText, tint: riskTint)
+        }
+    }
+
+    private func metricChip(text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+            }
+    }
+
+    private var riskTint: Color {
+        switch impact?.volatilityRisk ?? .normal {
+        case .normal: AppTheme.textSecondary(colorScheme)
+        case .elevated: Color(red: 0.88, green: 0.57, blue: 0.16)
+        case .high: AppTheme.critical
+        }
+    }
+
+    /// 数据状态用文字 + 图标表达，不只靠颜色。
+    @ViewBuilder
+    private func stateBadge(_ impact: GoldEventImpact) -> some View {
+        let (text, icon, tint): (String, String, Color) = {
+            switch impact.dataState {
+            case .live:
+                return (LocalizedString.l(language, en: "Live data", zh: "实时数据", ja: "リアルタイムデータ", ko: "실시간 데이터"), "checkmark.circle", AppTheme.healthy)
+            case .partial:
+                return (LocalizedString.l(language, en: "Incomplete data", zh: "数据不完整", ja: "不完全なデータ", ko: "불완전한 데이터"), "exclamationmark.triangle", AppTheme.warning)
+            case .stale:
+                return (LocalizedString.l(language, en: "Cached data", zh: "缓存数据", ja: "キャッシュデータ", ko: "캐시 데이터"), "clock.badge.checkmark", Color(red: 0.88, green: 0.57, blue: 0.16))
+            case .unavailable:
+                return (LocalizedString.l(language, en: "Data unavailable", zh: "数据不可用", ja: "データ利用不可", ko: "데이터 사용 불가"), "wifi.slash", AppTheme.critical)
+            }
+        }()
+        Label(text, systemImage: icon)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(tint)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func evidenceSection(
+        state: GoldEvidenceState,
+        items: [GoldEventEvidence],
+        expandedLimit: Int
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(GoldEventImpactPresentation.evidenceLabel(for: state, language: language))
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary(colorScheme))
+
+            ForEach(items.prefix(expandedLimit)) { evidence in
+                evidenceRow(evidence)
+            }
+
+            if items.count > expandedLimit {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(items.dropFirst(expandedLimit)) { evidence in
+                            evidenceRow(evidence)
+                        }
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    Text(LocalizedString.l(
+                        language,
+                        en: "Show \(items.count - expandedLimit) more",
+                        zh: "展开其余 \(items.count - expandedLimit) 条",
+                        ja: "残り \(items.count - expandedLimit) 件を表示",
+                        ko: "나머지 \(items.count - expandedLimit)개 보기"
+                    ))
+                    .font(.system(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func evidenceRow(_ evidence: GoldEventEvidence) -> some View {
+        let content = HStack(alignment: .top, spacing: 7) {
+            Circle()
+                .fill(evidenceTint(evidence.direction))
+                .frame(width: 6, height: 6)
+                .padding(.top, 4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(evidence.summary)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 5) {
+                    if let source = evidence.source, !source.isEmpty {
+                        Text(source)
+                    }
+                    if let observedAt = evidence.observedAt {
+                        Text(observedAt, style: .relative)
+                    }
+                }
+                .font(.system(size: 8.5))
+                .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+
+            Spacer(minLength: 0)
+
+            if evidence.link != nil {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+        }
+
+        // 新闻链接只挂在对应 observed 证据上，推断不提供跳转
+        if let link = evidence.link, evidence.state == .observed {
+            Link(destination: link) { content }
+                .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    private func evidenceTint(_ direction: GoldImpactDirection) -> Color {
+        switch direction {
+        case .bullish: AppTheme.healthy
+        case .neutral: AppTheme.textSecondary(colorScheme)
+        case .bearish: AppTheme.critical
+        }
+    }
+
+    private func counterRiskSection(_ risks: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(
+                LocalizedString.l(language, en: "Counter risks", zh: "反方风险", ja: "反対リスク", ko: "반대 리스크"),
+                systemImage: "exclamationmark.circle"
+            )
+            .font(.system(size: 9.5, weight: .semibold))
+            .foregroundStyle(Color(red: 0.88, green: 0.57, blue: 0.16))
+
+            ForEach(Array(risks.prefix(3).enumerated()), id: \.offset) { _, risk in
+                Label(risk, systemImage: "circle.fill")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

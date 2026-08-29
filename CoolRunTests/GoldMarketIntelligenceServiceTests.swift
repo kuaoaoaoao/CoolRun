@@ -55,8 +55,10 @@ final class GoldMarketIntelligenceServiceTests: XCTestCase {
 
         let snapshot = await service.fetchSnapshot(now: fixedNow, language: .chinese)
 
-        XCTAssertEqual(await contextStub.callCount, 1)
-        XCTAssertEqual(await globalStub.callCount, 1)
+        let contextCalls = await contextStub.callCount
+        let globalCalls = await globalStub.callCount
+        XCTAssertEqual(contextCalls, 1)
+        XCTAssertEqual(globalCalls, 1)
         XCTAssertEqual(snapshot.context.overallScore, 10)
         XCTAssertEqual(snapshot.eventImpact.dataState, .live)
         XCTAssertEqual(snapshot.globalSnapshot?.xauUsd ?? 0, 4_454.52, accuracy: 0.001)
@@ -112,8 +114,10 @@ final class GoldMarketIntelligenceServiceTests: XCTestCase {
         async let second = service.fetchSnapshot(now: fixedNow, language: .chinese)
         let snapshots = await [first, second]
 
-        XCTAssertEqual(await contextStub.callCount, 1, "in-flight 合并后底层 context 只调用一次")
-        XCTAssertEqual(await globalStub.callCount, 1, "in-flight 合并后底层 global 只调用一次")
+        let contextCalls = await contextStub.callCount
+        let globalCalls = await globalStub.callCount
+        XCTAssertEqual(contextCalls, 1, "in-flight 合并后底层 context 只调用一次")
+        XCTAssertEqual(globalCalls, 1, "in-flight 合并后底层 global 只调用一次")
         XCTAssertEqual(snapshots.count, 2)
     }
 
@@ -134,8 +138,10 @@ final class GoldMarketIntelligenceServiceTests: XCTestCase {
             language: .chinese
         )
 
-        XCTAssertEqual(await contextStub.callCount, 1)
-        XCTAssertEqual(await globalStub.callCount, 1)
+        let contextCalls = await contextStub.callCount
+        let globalCalls = await globalStub.callCount
+        XCTAssertEqual(contextCalls, 1)
+        XCTAssertEqual(globalCalls, 1)
     }
 
     func testCacheOlderThan15MinutesRefetches() async {
@@ -153,8 +159,10 @@ final class GoldMarketIntelligenceServiceTests: XCTestCase {
             language: .chinese
         )
 
-        XCTAssertEqual(await contextStub.callCount, 2)
-        XCTAssertEqual(await globalStub.callCount, 2)
+        let contextCalls = await contextStub.callCount
+        let globalCalls = await globalStub.callCount
+        XCTAssertEqual(contextCalls, 2)
+        XCTAssertEqual(globalCalls, 2)
     }
 }
 

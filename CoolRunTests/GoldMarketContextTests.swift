@@ -4,11 +4,13 @@ import XCTest
 final class GoldMarketContextTests: XCTestCase {
     private var urlProtocolStub: GoldContextURLProtocolStub!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         urlProtocolStub = GoldContextURLProtocolStub()
         URLProtocol.registerClass(GoldContextURLProtocolStub.self)
         GoldContextURLProtocolStub.reset()
+        // 服务缓存是进程级的，必须逐用例清空避免相互污染
+        await GoldMarketContextService.resetCacheForTesting()
     }
 
     override func tearDown() {

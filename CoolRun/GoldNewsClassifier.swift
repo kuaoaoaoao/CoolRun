@@ -41,7 +41,7 @@ enum GoldNewsClassifier {
 
     private static let goldAssetPhrases: [String] = [
         "黄金", "金价", "贵金属", "金条",
-        "gold price", "gold market", "gold rises", "gold falls",
+        "gold", "gold price", "gold market", "gold rises", "gold falls",
         "gold drops", "gold climbs", "gold jumps", "gold slides",
         "bullion", "xauusd", "xau/usd", "gold bullion"
     ]
@@ -327,8 +327,9 @@ enum GoldNewsClassifier {
         excludedSportsPhrases.contains { text.contains($0) }
     }
 
+    /// 英文短语使用词边界匹配，避免 "gold" 误命中 "Goldman" 等子串。
     private nonisolated static func hasGoldAssetPhrase(_ text: String) -> Bool {
-        goldAssetPhrases.contains { text.contains($0) }
+        goldAssetPhrases.contains { containsWholePhrase(in: text, single: $0) }
     }
 
     private nonisolated static func hasFinancialContext(_ text: String) -> Bool {
