@@ -117,7 +117,10 @@ final class GoldMarketContextService {
         self.session = session
     }
 
-    func fetchContext(now: Date = Date()) async throws -> GoldMarketContext {
+    func fetchContext(
+        now: Date = Date(),
+        language: AppLanguage
+    ) async throws -> GoldMarketContext {
         if let cached = await Self.cache.context(maxAge: 15 * 60, now: now) {
             return cached.markedAsCache(true)
         }
@@ -130,31 +133,31 @@ final class GoldMarketContextService {
             macro = try await fetchTreasuryYieldContext(now: now)
         } catch {
             macro = nil
-            missingParts.append(LocalizedString.gold("missing_treasury"))
+            missingParts.append(LocalizedString.gold("missing_treasury", lang: language))
         }
 
         do {
             newsItems = try await fetchGoldNews(now: now)
         } catch {
             newsItems = []
-            missingParts.append(LocalizedString.gold("missing_news_rss"))
+            missingParts.append(LocalizedString.gold("missing_news_rss", lang: language))
         }
 
         if macro == nil, newsItems.isEmpty,
            let staleContext = await Self.cache.context(maxAge: nil, now: now) {
             return staleContext.markedAsCache(
                 true,
-                missingDataDescription: LocalizedString.gold("missing_macro_failed")
+                missingDataDescription: LocalizedString.gold("missing_macro_failed", lang: language)
             )
         }
 
         let context = GoldMarketContextScorer.makeContext(
             macro: macro,
             newsItems: newsItems,
-            language: AppSettings.shared.language,
+            language: language,
             now: now,
             missingDataDescription: missingParts.isEmpty ? nil : String(
-                format: LocalizedString.gold("missing_unavailable_format"),
+                format: LocalizedString.gold("missing_unavailable_format", lang: language),
                 missingParts.joined(separator: ", ")
             )
         )
@@ -214,7 +217,6 @@ final class GoldMarketContextService {
         guard !batches.isEmpty else { throw GoldMarketContextError.invalidResponse }
 
         let oldestAllowed = now.addingTimeInterval(-4 * 24 * 60 * 60)
-        var seenTitles = Set<String>()
         let merged = batches
             .flatMap { $0 }
             .filter { item in
@@ -223,20 +225,26 @@ final class GoldMarketContextService {
             .sorted { lhs, rhs in
                 (lhs.publishedAt ?? .distantPast) > (rhs.publishedAt ?? .distantPast)
             }
-            .filter { item in
-                let key = Self.normalizedNewsTitle(item.title)
-                return !key.isEmpty && seenTitles.insert(key).inserted
-            }
 
-        return merged.prefix(30).map { item in
-            GoldNewsItem(
+        // 在一处完成金融相关性过滤、事件键聚类和去重；
+        // GoldMarketContextScorer 只消费已经去重的 items。
+        let classified = merged.compactMap { item -> GoldNewsItem? in
+            let classification = GoldNewsClassifier.classify(
+                title: item.title,
+                source: item.source
+            )
+            guard classification.isFinanciallyRelevant else { return nil }
+            return GoldNewsItem(
                 title: item.title,
                 source: item.source,
                 link: item.link,
                 publishedAt: item.publishedAt,
-                sentimentScore: GoldMarketContextScorer.scoreNewsText(item.title)
+                sentimentScore: classification.sentimentScore,
+                eventKey: GoldNewsClassifier.eventKey(title: item.title),
+                sourceTier: classification.sourceTier
             )
         }
+        return Array(GoldNewsClassifier.deduplicate(items: classified).prefix(30))
     }
 
     private static func newsURL(for search: NewsSearch) throws -> URL {
@@ -253,12 +261,6 @@ final class GoldMarketContextService {
 
         guard let url = components.url else { throw GoldMarketContextError.invalidURL }
         return url
-    }
-
-    private static func normalizedNewsTitle(_ title: String) -> String {
-        title
-            .lowercased()
-            .replacingOccurrences(of: #"[^\p{L}\p{N}]"#, with: "", options: .regularExpression)
     }
 
     private func fetchTreasuryYieldContext(now: Date) async throws -> GoldMacroSnapshot {

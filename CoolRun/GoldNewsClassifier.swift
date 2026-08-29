@@ -48,7 +48,9 @@ enum GoldNewsClassifier {
 
     private static let financialContextPhrases: [String] = [
         "price", "market", "inflation", "rate", "yield", "yields",
-        "美元指数", "收益率", "避险", "通胀", "利率", "行情", "市场"
+        "fed", "federal reserve", "fomc", "central bank",
+        "美元指数", "收益率", "避险", "通胀", "利率", "行情", "市场",
+        "美联储", "央行", "货币政策"
     ]
 
     // MARK: 宏观事件路径词

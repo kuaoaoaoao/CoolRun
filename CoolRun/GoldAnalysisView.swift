@@ -50,8 +50,12 @@ final class GoldAnalysisViewModel {
     private(set) var multiSourcePrices: [GoldMultiSourcePrice] = []
     // 国际市场参考（失败置 nil，卡片隐藏）
     private(set) var globalSnapshot: GoldGlobalSnapshot?
+    // 局势感知（针对 stcn.com / ifeng.com 等爬取的宏观局势判断，失败置 nil 卡片隐藏）
+    private(set) var situationAssessment: GoldSituationAssessment?
+    private(set) var isSituationLoading = false
 
     private let marketContextService = GoldMarketContextService()
+    private let situationService = GoldSituationAwarenessService.shared
     private let marketDataService = GoldMarketDataService.shared
     private let globalMarketService = GoldGlobalMarketService.shared
     private let learningStore = GoldPredictionLearningStore.shared
@@ -60,6 +64,7 @@ final class GoldAnalysisViewModel {
     private var remoteChartTask: Task<Void, Never>?
     private var multiSourceTask: Task<Void, Never>?
     private var globalMarketTask: Task<Void, Never>?
+    private var situationTask: Task<Void, Never>?
     private var lastRecordsSignature = ""
 
     func refresh(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
@@ -106,8 +111,10 @@ final class GoldAnalysisViewModel {
         marketContextTask?.cancel()
 
         let service = marketContextService
+        // 在 MainActor 捕获语言后再传入异步服务
+        let language = AppSettings.shared.language
         marketContextTask = Task { [weak self] in
-            let context = try? await service.fetchContext()
+            let context = try? await service.fetchContext(language: language)
             guard !Task.isCancelled else { return }
 
             self?.marketContext = context
@@ -178,6 +185,20 @@ final class GoldAnalysisViewModel {
         }
     }
 
+    // 局势感知（针对 stcn.com / ifeng.com 爬取宏观新闻，给出持有/卖出判断与风险规避，失败时静默隐藏卡片）
+    func refreshSituationAwareness() {
+        guard !isSituationLoading else { return }
+        isSituationLoading = true
+        situationTask?.cancel()
+        let service = situationService
+        situationTask = Task { [weak self] in
+            let assessment = await service.fetchAssessment()
+            guard !Task.isCancelled else { return }
+            self?.situationAssessment = assessment
+            self?.isSituationLoading = false
+        }
+    }
+
     func cancel() {
         analysisTask?.cancel()
         analysisTask = nil
@@ -189,10 +210,13 @@ final class GoldAnalysisViewModel {
         multiSourceTask = nil
         globalMarketTask?.cancel()
         globalMarketTask = nil
+        situationTask?.cancel()
+        situationTask = nil
         lastRecordsSignature = ""
         isLoading = false
         isMarketContextLoading = false
         isRemoteChartLoading = false
+        isSituationLoading = false
     }
 
     private func apply(_ result: GoldAnalysisResult, sourceRecords: [GoldPriceRecord]) {
@@ -525,6 +549,14 @@ struct GoldAnalysisView: View {
                         )
                     }
 
+                    // 局势感知：加载中或有结果时展示（失败静默隐藏）
+                    if viewModel.isSituationLoading || viewModel.situationAssessment != nil {
+                        SituationAwarenessCard(
+                            assessment: viewModel.situationAssessment,
+                            isLoading: viewModel.isSituationLoading
+                        )
+                    }
+
                     GoldPositionCard(
                         gramsText: $holdingGramsText,
                         averageCostText: $holdingAverageCostText,
@@ -555,6 +587,7 @@ struct GoldAnalysisView: View {
             viewModel.refreshRemoteChart(range: chartRange)
             viewModel.refreshMultiSourcePrices()
             viewModel.refreshGlobalMarket()
+            viewModel.refreshSituationAwareness()
         }
         .task {
             // 定时重新评估数据健康度，网络长时间失败时健康徽标也能变为"陈旧"
@@ -1010,6 +1043,7 @@ struct GoldAnalysisView: View {
             viewModel.refreshRemoteChart(range: chartRange)
             viewModel.refreshMultiSourcePrices()
             viewModel.refreshGlobalMarket()
+            viewModel.refreshSituationAwareness()
             isManualRefreshing = false
         }
     }
@@ -2001,6 +2035,278 @@ private struct AdvancedStrategyHeader: View {
         }
     }
 
+}
+
+private struct SituationAwarenessCard: View {
+    let assessment: GoldSituationAssessment?
+    let isLoading: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isExpanded = true
+
+    private var tint: Color {
+        guard let assessment else { return AppTheme.gold }
+        switch assessment.riskLevel {
+        case .low: return AppTheme.healthy
+        case .elevated: return AppTheme.warning
+        case .high: return AppTheme.critical
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+
+            if let assessment {
+                actionRow(assessment)
+
+                Text(assessment.headline)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !assessment.transmissionChain.isEmpty {
+                    transmissionChainView(assessment.transmissionChain)
+                }
+
+                if !assessment.riskWarnings.isEmpty {
+                    warningsView(assessment.riskWarnings)
+                }
+
+                if !assessment.newsItems.isEmpty {
+                    Divider().opacity(0.45)
+
+                    DisclosureGroup(isExpanded: $isExpanded) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(assessment.newsItems.prefix(8))) { item in
+                                newsRow(item)
+                            }
+                        }
+                        .padding(.top, 4)
+                    } label: {
+                        Label(
+                            String(
+                                format: LocalizedString.l(
+                                    AppSettings.shared.language,
+                                    en: "Supporting news (%d)",
+                                    zh: "支撑新闻 (%d)",
+                                    ja: "根拠ニュース (%d)",
+                                    ko: "근거 뉴스 (%d)"
+                                ),
+                                assessment.newsItems.count
+                            ),
+                            systemImage: "newspaper.fill"
+                        )
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    }
+                    .tint(AppTheme.textSecondary(colorScheme))
+                }
+            } else {
+                Text(
+                    isLoading
+                        ? LocalizedString.l(
+                            AppSettings.shared.language,
+                            en: "Sensing macro situation…",
+                            zh: "正在感知宏观局势…",
+                            ja: "マクロ状況を感知中…",
+                            ko: "거시 상황 감지 중…"
+                        )
+                        : LocalizedString.l(
+                            AppSettings.shared.language,
+                            en: "Situation awareness unavailable",
+                            zh: "局势感知暂不可用",
+                            ja: "状況認識は利用できません",
+                            ko: "상황 인식을 사용할 수 없습니다"
+                        )
+                )
+                .font(.system(size: 10))
+                .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(colorScheme == .dark ? Color.black.opacity(0.25) : Color.white.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(tint.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(
+                LocalizedString.l(
+                    AppSettings.shared.language,
+                    en: "Situation Awareness",
+                    zh: "局势感知",
+                    ja: "状況認識",
+                    ko: "상황 인식"
+                ),
+                systemImage: "satellite.fill"
+            )
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(tint)
+
+            Spacer(minLength: 6)
+
+            if isLoading {
+                ProgressView().controlSize(.small)
+            } else if let assessment {
+                Text(assessment.riskLevel.title)
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(tint.opacity(0.16))
+                    .foregroundStyle(tint)
+                    .clipShape(Capsule())
+            }
+        }
+    }
+
+    private func actionRow(_ assessment: GoldSituationAssessment) -> some View {
+        HStack(spacing: 8) {
+            Label(assessment.action.title, systemImage: assessment.action.systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(tint)
+                .clipShape(Capsule())
+
+            HStack(spacing: 4) {
+                scorePill(
+                    LocalizedString.l(AppSettings.shared.language, en: "Hawkish", zh: "鹰派", ja: "タカ派", ko: "매파"),
+                    value: assessment.hawkishScore,
+                    color: AppTheme.critical
+                )
+                scorePill(
+                    LocalizedString.l(AppSettings.shared.language, en: "Dovish", zh: "鸽派", ja: "ハト派", ko: "비둘기"),
+                    value: assessment.dovishScore,
+                    color: AppTheme.healthy
+                )
+            }
+
+            Spacer(minLength: 0)
+
+            if assessment.isFromCache {
+                Image(systemName: "clock.badge.checkmark")
+                    .font(.system(size: 9))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+        }
+    }
+
+    private func scorePill(_ title: String, value: Double, color: Color) -> some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(.system(size: 8, weight: .medium))
+            Text(value.shortNumber)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .monospacedDigit()
+        }
+        .foregroundStyle(color)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+
+    private func transmissionChainView(_ chain: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(chain.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .top, spacing: 6) {
+                    VStack(spacing: 2) {
+                        Circle()
+                            .fill(tint)
+                            .frame(width: 6, height: 6)
+                            .padding(.top, 3)
+                        if index < chain.count - 1 {
+                            Rectangle()
+                                .fill(tint.opacity(0.3))
+                                .frame(width: 1)
+                                .frame(maxHeight: .infinity)
+                        }
+                    }
+                    Text(step)
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, index < chain.count - 1 ? 6 : 0)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(8)
+        .background(tint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func warningsView(_ warnings: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(warnings.prefix(3)), id: \.self) { warning in
+                Label {
+                    Text(warning)
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppTheme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(AppTheme.warning)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func newsRow(_ item: GoldNewsItem) -> some View {
+        let content = HStack(alignment: .top, spacing: 6) {
+            Circle()
+                .fill(newsTint(item))
+                .frame(width: 5, height: 5)
+                .padding(.top, 4)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 4) {
+                    if let source = item.source, !source.isEmpty {
+                        Text(source)
+                    }
+                    if let publishedAt = item.publishedAt {
+                        Text(publishedAt, style: .relative)
+                    }
+                }
+                .font(.system(size: 8))
+                .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+
+            Spacer(minLength: 0)
+
+            if item.link != nil {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+        }
+
+        if let link = item.link {
+            Link(destination: link) { content }.buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    private func newsTint(_ item: GoldNewsItem) -> Color {
+        if item.sentimentScore > 0 { return AppTheme.healthy }
+        if item.sentimentScore < 0 { return AppTheme.critical }
+        return AppTheme.textSecondary(colorScheme)
+    }
 }
 
 private struct MarketContextCard: View {
