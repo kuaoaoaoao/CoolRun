@@ -15,12 +15,34 @@ enum GoldMarketContextTone: Equatable, Sendable {
 }
 
 struct GoldNewsItem: Identifiable, Sendable {
-    let id = UUID()
+    let id: UUID
     let title: String
     let source: String?
     let link: URL?
     let publishedAt: Date?
     let sentimentScore: Double
+    let eventKey: String
+    let sourceTier: GoldNewsSourceTier
+
+    nonisolated init(
+        id: UUID = UUID(),
+        title: String,
+        source: String?,
+        link: URL?,
+        publishedAt: Date?,
+        sentimentScore: Double,
+        eventKey: String? = nil,
+        sourceTier: GoldNewsSourceTier? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.source = source
+        self.link = link
+        self.publishedAt = publishedAt
+        self.sentimentScore = sentimentScore
+        self.eventKey = eventKey ?? GoldNewsClassifier.eventKey(title: title)
+        self.sourceTier = sourceTier ?? GoldNewsClassifier.sourceTier(source)
+    }
 }
 
 struct GoldMacroSnapshot: Sendable {
@@ -357,21 +379,7 @@ enum GoldMarketContextScorer {
     }
 
     nonisolated static func scoreNewsText(_ text: String) -> Double {
-        let normalized = text.lowercased()
-        let bullishKeywords = [
-            "降息", "宽松", "通胀", "避险", "地缘", "战争", "冲突", "危机", "衰退", "央行增持", "美元走弱",
-            "rate cut", "cuts rates", "dovish", "inflation", "safe haven", "geopolitical", "war", "recession",
-            "central bank buying", "weaker dollar", "dollar falls", "yields fall", "lower yields"
-        ]
-        let bearishKeywords = [
-            "加息", "鹰派", "美元走强", "收益率上升", "风险偏好", "股市上涨", "通胀降温",
-            "rate hike", "hawkish", "strong dollar", "dollar rises", "yields rise", "higher yields",
-            "risk appetite", "stocks rally", "cooling inflation"
-        ]
-
-        let bullishCount = bullishKeywords.filter { normalized.contains($0) }.count
-        let bearishCount = bearishKeywords.filter { normalized.contains($0) }.count
-        return (Double(bullishCount - bearishCount) * 18).clamped(to: -100...100)
+        GoldNewsClassifier.classify(title: text, source: nil).sentimentScore
     }
 
     private nonisolated static func scoreMacro(_ macro: GoldMacroSnapshot?) -> Double {
@@ -504,14 +512,14 @@ private final class TreasuryYieldXMLParser: NSObject, XMLParserDelegate {
     }
 }
 
-private struct RSSParsedItem {
+struct RSSParsedItem {
     let title: String
     let source: String?
     let link: URL?
     let publishedAt: Date?
 }
 
-private final class GoldNewsRSSParser: NSObject, XMLParserDelegate {
+final class GoldNewsRSSParser: NSObject, XMLParserDelegate {
     private var items: [RSSParsedItem] = []
     private var isInsideItem = false
     private var activeElement = ""
