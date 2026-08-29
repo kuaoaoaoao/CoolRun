@@ -418,6 +418,132 @@ final class InterfaceRenderTests: XCTestCase {
         )
     }
 
+    // MARK: - 事件影响卡片文案
+
+    private func makeEventEvidence(state: GoldEvidenceState, direction: GoldImpactDirection) -> GoldEventEvidence {
+        GoldEventEvidence(
+            id: "\(state.rawValue)-\(UUID().uuidString)",
+            kind: state == .observed ? .centralBankStatement : .policyExpectation,
+            state: state,
+            direction: direction,
+            summary: "美联储讲话强调通胀目标",
+            source: "证券时报",
+            link: state == .observed ? URL(string: "https://stcn.com/example") : nil,
+            observedAt: Date(timeIntervalSince1970: 1_788_000_000)
+        )
+    }
+
+    private func makeEventImpact(
+        direction: GoldImpactDirection,
+        confidence: GoldImpactConfidence,
+        risk: GoldVolatilityRisk,
+        dataState: GoldIntelligenceDataState
+    ) -> GoldEventImpact {
+        GoldEventImpact.make(
+            direction: direction,
+            confidence: confidence,
+            volatilityRisk: risk,
+            headline: "美联储抗通胀立场与收益率、黄金价格反应相互印证",
+            evidence: [
+                makeEventEvidence(state: .observed, direction: direction),
+                makeEventEvidence(state: .inferred, direction: direction)
+            ],
+            counterRisks: ["市场已快速定价，后续数据转弱可能逆转走势"],
+            updatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+            dataState: dataState,
+            language: .chinese
+        )
+    }
+
+    func testEventImpactPresentationUnavailableShowsNoTradeAction() {
+        let impact = GoldEventImpact.unavailable(now: Date(), language: .chinese)
+        let presentation = GoldEventImpactPresentation(impact: impact, language: .chinese)
+
+        XCTAssertTrue(presentation.dataStateText.contains("不可用"))
+        for text in [presentation.directionText, presentation.confidenceText, presentation.dataStateText, presentation.riskText] {
+            XCTAssertFalse(text.contains("卖出"))
+            XCTAssertFalse(text.contains("减仓"))
+            XCTAssertFalse(text.contains("持有"))
+        }
+    }
+
+    func testEventImpactPresentationPartialShowsIncompleteData() {
+        let impact = makeEventImpact(direction: .bearish, confidence: .low, risk: .elevated, dataState: .partial)
+        let presentation = GoldEventImpactPresentation(impact: impact, language: .chinese)
+
+        XCTAssertTrue(presentation.dataStateText.contains("不完整"))
+        XCTAssertFalse(presentation.confidenceText.contains("高"))
+    }
+
+    func testEventImpactPresentationStaleShowsCacheLabel() {
+        let impact = makeEventImpact(direction: .bearish, confidence: .low, risk: .elevated, dataState: .stale)
+        let presentation = GoldEventImpactPresentation(impact: impact, language: .chinese)
+
+        XCTAssertTrue(presentation.dataStateText.contains("缓存"))
+    }
+
+    func testEventImpactPresentationBearishHighShowsDirectionalLabels() {
+        let impact = makeEventImpact(direction: .bearish, confidence: .high, risk: .elevated, dataState: .live)
+        let presentation = GoldEventImpactPresentation(impact: impact, language: .chinese)
+
+        XCTAssertEqual(presentation.directionText, "短线偏空")
+        XCTAssertTrue(presentation.confidenceText.contains("高"))
+        XCTAssertTrue(presentation.riskText.contains("升高"))
+    }
+
+    func testEventImpactPresentationBullishHighRiskKeepsHighRiskVisible() {
+        let highRisk = makeEventImpact(direction: .bullish, confidence: .high, risk: .high, dataState: .live)
+        let normalRisk = makeEventImpact(direction: .bullish, confidence: .high, risk: .normal, dataState: .live)
+
+        let highPresentation = GoldEventImpactPresentation(impact: highRisk, language: .chinese)
+        let normalPresentation = GoldEventImpactPresentation(impact: normalRisk, language: .chinese)
+
+        XCTAssertEqual(highPresentation.directionText, "短线偏多")
+        XCTAssertNotEqual(highPresentation.riskText, normalPresentation.riskText)
+        XCTAssertFalse(highPresentation.riskText.contains("低"))
+        XCTAssertFalse(highPresentation.riskText.contains("正常"))
+    }
+
+    func testEventImpactEvidenceStatesHaveDistinctLabels() {
+        let observedLabel = GoldEventImpactPresentation.evidenceLabel(for: .observed, language: .chinese)
+        let inferredLabel = GoldEventImpactPresentation.evidenceLabel(for: .inferred, language: .chinese)
+
+        XCTAssertNotEqual(observedLabel, inferredLabel)
+        XCTAssertTrue(observedLabel.contains("确认"))
+        XCTAssertTrue(inferredLabel.contains("推断"))
+    }
+
+    func testEventImpactCardRendersAtMenuBarWidth() throws {
+        let impact = GoldEventImpact.make(
+            direction: .bearish,
+            confidence: .high,
+            volatilityRisk: .elevated,
+            headline: "美联储抗通胀立场与收益率、黄金价格反应相互印证",
+            evidence: [
+                makeEventEvidence(state: .observed, direction: .bearish),
+                makeEventEvidence(state: .observed, direction: .bearish),
+                makeEventEvidence(state: .observed, direction: .bearish),
+                makeEventEvidence(state: .observed, direction: .bearish),
+                makeEventEvidence(state: .inferred, direction: .bearish),
+                makeEventEvidence(state: .inferred, direction: .bearish)
+            ],
+            counterRisks: ["市场已快速定价，后续数据转弱可能逆转走势"],
+            updatedAt: Date(),
+            dataState: .live,
+            language: .chinese
+        )
+
+        try render(
+            EventImpactCard(impact: impact, isLoading: false)
+                .padding(10)
+                .frame(width: 304)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, .light),
+            size: NSSize(width: 304, height: 460),
+            filename: "coolrun-event-impact-preview.png"
+        )
+    }
+
     private func render<Content: View>(
         _ content: Content,
         size: NSSize,
