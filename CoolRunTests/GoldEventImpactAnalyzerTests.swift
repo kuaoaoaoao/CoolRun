@@ -30,4 +30,115 @@ final class GoldEventImpactAnalyzerTests: XCTestCase {
         XCTAssertEqual(impact.confidence, .unavailable)
         XCTAssertEqual(impact.dataState, .unavailable)
     }
+
+    // MARK: - Task 3
+
+    func testEmptyInputFailsClosed() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: [],
+                macro: nil,
+                globalSnapshot: nil,
+                dataState: .unavailable,
+                now: now
+            ),
+            language: .chinese
+        )
+
+        XCTAssertEqual(impact.dataState, .unavailable)
+        XCTAssertEqual(impact.direction, .neutral)
+        XCTAssertTrue(impact.evidence.isEmpty)
+    }
+
+    func testHawkishNewsWithoutMarketConfirmationIsLowConfidenceBearish() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let item = GoldNewsItem(
+            title: "Fed keeps rate hike option open; gold market watches inflation",
+            source: "Reuters",
+            link: URL(string: "https://example.com/fed"),
+            publishedAt: now.addingTimeInterval(-600),
+            sentimentScore: -18
+        )
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: [item],
+                macro: nil,
+                globalSnapshot: nil,
+                dataState: .partial,
+                now: now
+            ),
+            language: .english
+        )
+
+        XCTAssertEqual(impact.direction, .bearish)
+        XCTAssertEqual(impact.confidence, .low)
+        XCTAssertEqual(impact.dataState, .partial)
+        XCTAssertFalse(impact.headline.lowercased().contains("sell"))
+    }
+
+    func testHawkishNewsWithYieldRiseAndGoldDropReachesHighConfidence() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let item = GoldNewsItem(
+            title: "Fed rate hike odds rise as gold price falls",
+            source: "Reuters",
+            link: URL(string: "https://example.com/market"),
+            publishedAt: now.addingTimeInterval(-300),
+            sentimentScore: -36
+        )
+        let macro = GoldMacroSnapshot(
+            tenYearYield: 4.72,
+            tenYearYieldChangeBps: 5.6,
+            observedAt: now
+        )
+        let global = GoldGlobalSnapshot(
+            xauUsd: 4_454.52,
+            xauPrevClose: 4_601.30,
+            usdCny: 7.10,
+            dollarIndex: 99.71,
+            updatedAt: now
+        )
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: [item],
+                macro: macro,
+                globalSnapshot: global,
+                dataState: .live,
+                now: now
+            ),
+            language: .english
+        )
+
+        XCTAssertEqual(impact.direction, .bearish)
+        XCTAssertEqual(impact.confidence, .high)
+        XCTAssertTrue(impact.evidence.contains { $0.kind == .treasuryYield })
+        XCTAssertTrue(impact.evidence.contains { $0.kind == .goldPrice })
+    }
+
+    func testGeopoliticalBullishImpactKeepsHighVolatilityRisk() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let item = GoldNewsItem(
+            title: "Gold price rises on geopolitical conflict and safe-haven demand",
+            source: "Reuters",
+            link: nil,
+            publishedAt: now,
+            sentimentScore: 36
+        )
+
+        let impact = GoldEventImpactAnalyzer.analyze(
+            GoldEventImpactInput(
+                newsItems: [item],
+                macro: nil,
+                globalSnapshot: nil,
+                dataState: .partial,
+                now: now
+            ),
+            language: .english
+        )
+
+        XCTAssertEqual(impact.direction, .bullish)
+        XCTAssertEqual(impact.volatilityRisk, .high)
+    }
 }
