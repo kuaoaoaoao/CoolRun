@@ -169,4 +169,105 @@ final class CountdownModelTests: XCTestCase {
         XCTAssertNil(archive.appSettings?.aiQuotaAlertEnabled)
         XCTAssertNil(archive.appSettings?.goldHoldingGramsText)
     }
+
+    // MARK: - v3 周预测档案兼容
+
+    func testVersionTwoArchiveWithoutWeeklyForecastRecordsStillDecodes() throws {
+        let json = """
+        {
+          "version": 2,
+          "exportedAt": "2026-08-30T00:00:00Z",
+          "appVersion": "1.0",
+          "birthdays": [],
+          "englishProgress": null,
+          "goldPriceRecords": [],
+          "goldPredictionLearningRecords": [],
+          "goldTrades": null,
+          "appSettings": null
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let archive = try decoder.decode(DataArchive.self, from: Data(json.utf8))
+
+        XCTAssertEqual(archive.version, 2)
+        XCTAssertNil(archive.goldWeeklyForecastRecords)
+    }
+
+    func testVersionThreeArchiveRoundTripsWeeklyForecastRecords() throws {
+        let generatedAt = Date(timeIntervalSince1970: 1_788_000_000)
+        let forecast = GoldWeeklyForecast(
+            direction: .up,
+            confidence: .low,
+            startPrice: 600,
+            expectedPrice: 606,
+            expectedReturn: 0.01,
+            p10: 594,
+            p50: 606,
+            p90: 618,
+            generatedAt: generatedAt,
+            targetDate: Calendar.goldShanghai.date(byAdding: .day, value: 7, to: generatedAt)!,
+            dataUpdatedAt: generatedAt,
+            currentPriceSource: "JD-MS",
+            historySource: GoldMarketDataService.historySourceID,
+            sourceCompatibility: .verified,
+            components: GoldWeeklyForecastComponents(
+                trend: 0.4, momentum: 0.3, meanReversion: -0.1,
+                bootstrap: 0.3, composite: 0.275
+            ),
+            reasons: ["fixture"],
+            counterRisks: [],
+            modelVersion: GoldWeeklyForecastPolicy.modelVersion
+        )
+        let backtest = GoldWeeklyForecastBacktestSummary(
+            resolvedCount: 30,
+            classCounts: [.up: 10, .flat: 10, .down: 10],
+            overallAccuracy: 0.50,
+            balancedAccuracy: 0.50,
+            majorityBaselineAccuracy: 1.0 / 3.0,
+            meanAbsoluteReturnError: 0.01,
+            confusionMatrix: [
+                .up: [.up: 5, .flat: 3, .down: 2],
+                .flat: [.up: 2, .flat: 5, .down: 3],
+                .down: [.up: 2, .flat: 3, .down: 5]
+            ],
+            passedReleaseGate: true,
+            failureReasons: []
+        )
+        let record = GoldWeeklyForecastRecord(
+            id: UUID(),
+            forecast: forecast,
+            backtest: backtest,
+            status: .validated,
+            resolvedAt: generatedAt.addingTimeInterval(7 * 24 * 3600),
+            endPrice: 620,
+            actualReturn: 0.02,
+            actualDirection: .up,
+            wasDirectionalHit: true,
+            absoluteReturnError: 0.01
+        )
+        let archive = DataArchive(
+            version: 3,
+            exportedAt: Date(),
+            appVersion: "1.0",
+            birthdays: [],
+            countdownEvents: nil,
+            englishProgress: nil,
+            goldPriceRecords: [],
+            goldPredictionLearningRecords: [],
+            goldTrades: nil,
+            appSettings: nil,
+            goldWeeklyForecastRecords: [record]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(DataArchive.self, from: encoder.encode(archive))
+
+        XCTAssertEqual(decoded.version, 3)
+        XCTAssertEqual(decoded.goldWeeklyForecastRecords, [record])
+    }
 }

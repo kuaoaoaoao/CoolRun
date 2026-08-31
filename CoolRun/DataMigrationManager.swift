@@ -99,7 +99,7 @@ final class DataMigrationManager {
 
     private func buildArchive() -> DataArchive {
         DataArchive(
-            version: 2,
+            version: 3,
             exportedAt: Date(),
             appVersion: AppVersion.current.marketingVersion,
             birthdays: BirthdayManager.shared.getAllBirthdays(),
@@ -108,7 +108,9 @@ final class DataMigrationManager {
             goldPriceRecords: GoldPriceStore.shared.records,
             goldPredictionLearningRecords: GoldPredictionLearningStore.shared.records,
             goldTrades: GoldTradeStore.shared.records.isEmpty ? nil : GoldTradeStore.shared.records,
-            appSettings: exportSettings()
+            appSettings: exportSettings(),
+            goldWeeklyForecastRecords: GoldWeeklyForecastStore.shared.records.isEmpty
+                ? nil : GoldWeeklyForecastStore.shared.records
         )
     }
 
@@ -156,6 +158,11 @@ final class DataMigrationManager {
         // 3.6 恢复交易流水（按 id 去重合并）
         if let trades = archive.goldTrades, !trades.isEmpty {
             GoldTradeStore.shared.merge(trades)
+        }
+
+        // 3.7 恢复一周预测记录（按 id 去重合并）
+        if let weeklyRecords = archive.goldWeeklyForecastRecords, !weeklyRecords.isEmpty {
+            GoldWeeklyForecastStore.shared.merge(weeklyRecords)
         }
 
         // 4. 恢复应用设置
@@ -281,6 +288,9 @@ final class DataMigrationManager {
         if let trades = archive.goldTrades, !trades.isEmpty {
             parts.append("• \(LocalizedString.migration("gold_trade_items")) \(trades.count)")
         }
+        if let weeklyRecords = archive.goldWeeklyForecastRecords, !weeklyRecords.isEmpty {
+            parts.append("• \(LocalizedString.migration("gold_weekly_forecast_items")) \(weeklyRecords.count)")
+        }
         if archive.appSettings != nil {
             parts.append("• \(LocalizedString.migration("app_settings"))")
         }
@@ -328,6 +338,8 @@ struct DataArchive: Codable {
     // v1.1 追加：交易流水（可选，兼容旧档案 decodeIfPresent）
     let goldTrades: [GoldTradeRecord]?
     let appSettings: SettingsData?
+    // v3 追加：一周预测记录（可选，兼容旧档案）
+    let goldWeeklyForecastRecords: [GoldWeeklyForecastRecord]?
 }
 
 // Extension to make GoldPredictionLearningRecord conform to Codable if needed
