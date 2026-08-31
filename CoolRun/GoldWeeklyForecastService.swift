@@ -45,6 +45,17 @@ enum GoldForecastSourceCompatibilityResolver {
         default: return .incompatible
         }
     }
+
+    /// 第 7 天验证用的来源规则：完全相同 source 返回 true；
+    /// JD-MS 与 JD-official 互相兼容；其他组合返回 false。
+    nonisolated static func canValidate(
+        forecastSource: String,
+        outcomeSource: String
+    ) -> Bool {
+        if forecastSource == outcomeSource { return true }
+        let jdFamily: Set<String> = ["JD-MS", "JD-official"]
+        return jdFamily.contains(forecastSource) && jdFamily.contains(outcomeSource)
+    }
 }
 
 // MARK: - 服务
