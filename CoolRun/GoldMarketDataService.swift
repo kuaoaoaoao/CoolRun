@@ -57,6 +57,16 @@ struct GoldMultiSourcePrice: Identifiable, Equatable, Sendable {
     let updatedAt: Date?
 }
 
+// MARK: - 周预测历史窄协议
+
+/// 周预测只依赖这一个历史接口；请求 URL、period 和缓存时长与走势图共用。
+protocol GoldWeeklyHistoryProviding: Sendable {
+    func fetchHistoryPrices(
+        range: GoldHistoryRange,
+        now: Date
+    ) async throws -> [GoldRemotePricePoint]
+}
+
 // MARK: - Service
 
 /// 官方走势（京东金融）与多平台金价对比（gold.rsky.cn）数据服务。
@@ -197,6 +207,15 @@ final class GoldMarketDataService: Sendable {
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter
     }
+}
+
+// MARK: - 周预测历史来源
+
+extension GoldMarketDataService: GoldWeeklyHistoryProviding {}
+
+extension GoldMarketDataService {
+    /// 历史日线固定来源标识（京东 historyPrices）。
+    nonisolated static let historySourceID = "JD-MS-history"
 }
 
 // MARK: - Cache

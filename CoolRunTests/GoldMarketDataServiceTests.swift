@@ -170,4 +170,19 @@ final class GoldMarketDataServiceTests: XCTestCase {
         let timestamps = inserted.map(\.timestamp)
         XCTAssertEqual(timestamps, timestamps.sorted())
     }
+
+    // MARK: - 周预测历史来源（协议与固定来源 ID）
+
+    func testHistorySourceIDIsFixed() {
+        XCTAssertEqual(GoldMarketDataService.historySourceID, "JD-MS-history")
+    }
+
+    func testServiceSatisfiesWeeklyHistoryProtocol() {
+        // 协议存在性由编译保证；运行时确认共享实例可作为历史提供方传递。
+        let provider: any GoldWeeklyHistoryProviding = GoldMarketDataService.shared
+        XCTAssertEqual(
+            type(of: provider) == GoldMarketDataService.self,
+            true
+        )
+    }
 }
