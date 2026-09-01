@@ -544,6 +544,177 @@ final class InterfaceRenderTests: XCTestCase {
         )
     }
 
+    // MARK: - 一周方向预测卡片
+
+    private func makeWeeklyForecast(
+        direction: GoldWeeklyForecastDirection = .up,
+        compatibility: GoldForecastSourceCompatibility = .verified,
+        generatedAt: Date = Date(timeIntervalSince1970: 1_788_000_000)
+    ) -> GoldWeeklyForecast {
+        let target = Calendar.goldShanghai.date(byAdding: .day, value: 7, to: generatedAt)!
+        return GoldWeeklyForecast(
+            direction: direction,
+            confidence: .medium,
+            startPrice: 600,
+            expectedPrice: 606,
+            expectedReturn: 0.01,
+            p10: 594,
+            p50: 606,
+            p90: 618,
+            generatedAt: generatedAt,
+            targetDate: target,
+            dataUpdatedAt: generatedAt,
+            currentPriceSource: compatibility == .proxy ? "CZB-JCJ" : "JD-MS",
+            historySource: GoldMarketDataService.historySourceID,
+            sourceCompatibility: compatibility,
+            components: GoldWeeklyForecastComponents(
+                trend: 0.4, momentum: 0.3, meanReversion: -0.1, bootstrap: 0.3, composite: 0.275
+            ),
+            reasons: ["fixture reason"],
+            counterRisks: ["fixture risk"],
+            modelVersion: GoldWeeklyForecastPolicy.modelVersion
+        )
+    }
+
+    private func makeWeeklyBacktest() -> GoldWeeklyForecastBacktestSummary {
+        GoldWeeklyForecastBacktestSummary(
+            resolvedCount: 40,
+            classCounts: [.up: 15, .flat: 12, .down: 13],
+            overallAccuracy: 0.55,
+            balancedAccuracy: 0.46,
+            majorityBaselineAccuracy: 0.40,
+            meanAbsoluteReturnError: 0.012,
+            confusionMatrix: [:],
+            passedReleaseGate: true,
+            failureReasons: []
+        )
+    }
+
+    private func makeWeeklySnapshot(
+        status: GoldWeeklyForecastStatus = .ready,
+        direction: GoldWeeklyForecastDirection = .up,
+        compatibility: GoldForecastSourceCompatibility = .verified,
+        message: String = "fixture"
+    ) -> GoldWeeklyForecastSnapshot {
+        GoldWeeklyForecastSnapshot(
+            status: status,
+            forecast: status == .ready
+                ? makeWeeklyForecast(direction: direction, compatibility: compatibility)
+                : nil,
+            backtest: status == .ready ? makeWeeklyBacktest() : nil,
+            message: message,
+            updatedAt: Date(timeIntervalSince1970: 1_788_000_000)
+        )
+    }
+
+    func testWeeklyForecastPresentationReadyUpAcrossLanguages() {
+        let snapshot = makeWeeklySnapshot(direction: .up)
+        let expectations: [(AppLanguage, String, String)] = [
+            (.chinese, "上涨", "信心：中"),
+            (.english, "Up", "Confidence: medium"),
+            (.japanese, "上昇", "信頼度：中"),
+            (.korean, "상승", "신뢰도: 보통")
+        ]
+        for (language, directionWord, confidenceWord) in expectations {
+            let presentation = GoldWeeklyForecastPresentation(snapshot: snapshot, language: language)
+            XCTAssertEqual(presentation.directionText, directionWord)
+            XCTAssertEqual(presentation.confidenceText, confidenceWord)
+            XCTAssertTrue(presentation.targetText?.contains("2026") ?? false, language.rawValue)
+            XCTAssertTrue(presentation.statusText.contains("40"), language.rawValue)
+            XCTAssertNil(presentation.sourceText)
+        }
+    }
+
+    func testWeeklyForecastPresentationReadyFlatAndDown() {
+        let flat = GoldWeeklyForecastPresentation(
+            snapshot: makeWeeklySnapshot(direction: .flat), language: .chinese
+        )
+        XCTAssertEqual(flat.directionText, "持平")
+        let down = GoldWeeklyForecastPresentation(
+            snapshot: makeWeeklySnapshot(direction: .down), language: .chinese
+        )
+        XCTAssertEqual(down.directionText, "下跌")
+    }
+
+    func testWeeklyForecastPresentationNonReadyStatusesShowMessage() {
+        let statuses: [GoldWeeklyForecastStatus] = [
+            .staleData, .sourceMismatch, .validationFailed, .sourceUnavailable
+        ]
+        for status in statuses {
+            let presentation = GoldWeeklyForecastPresentation(
+                snapshot: makeWeeklySnapshot(status: status), language: .chinese
+            )
+            XCTAssertEqual(presentation.statusText, "fixture")
+            XCTAssertNil(presentation.directionText)
+            XCTAssertNil(presentation.confidenceText)
+            XCTAssertNil(presentation.targetText)
+            XCTAssertNil(presentation.sourceText)
+        }
+    }
+
+    func testWeeklyForecastPresentationInsufficientHistoryShowsCounts() {
+        let snapshot = GoldWeeklyForecastSnapshot(
+            status: .insufficientHistory,
+            forecast: nil,
+            backtest: nil,
+            message: "历史数据不足：当前 96 个日线收盘点，至少需要 120 个",
+            updatedAt: Date(timeIntervalSince1970: 1_788_000_000)
+        )
+        let presentation = GoldWeeklyForecastPresentation(snapshot: snapshot, language: .chinese)
+        XCTAssertTrue(presentation.statusText.contains("96"))
+        XCTAssertTrue(presentation.statusText.contains("120"))
+    }
+
+    func testWeeklyForecastPresentationProxyShowsReferenceDailyClosesNote() {
+        let snapshot = makeWeeklySnapshot(compatibility: .proxy)
+        let presentation = GoldWeeklyForecastPresentation(snapshot: snapshot, language: .chinese)
+        XCTAssertEqual(presentation.sourceText, "历史模型使用国内黄金参考日线")
+    }
+
+    func testWeeklyForecastPresentationNeverContainsTradingActions() {
+        let snapshots = [
+            makeWeeklySnapshot(direction: .up),
+            makeWeeklySnapshot(direction: .flat),
+            makeWeeklySnapshot(direction: .down),
+            makeWeeklySnapshot(compatibility: .proxy),
+            makeWeeklySnapshot(status: .insufficientHistory),
+            makeWeeklySnapshot(status: .staleData),
+            makeWeeklySnapshot(status: .sourceMismatch),
+            makeWeeklySnapshot(status: .validationFailed),
+            makeWeeklySnapshot(status: .sourceUnavailable)
+        ]
+        let forbidden = ["买入", "卖出", "加仓", "减仓"]
+        for language in [AppLanguage.chinese, .english, .japanese, .korean] {
+            for snapshot in snapshots {
+                let presentation = GoldWeeklyForecastPresentation(snapshot: snapshot, language: language)
+                let texts = [
+                    presentation.title, presentation.directionText, presentation.confidenceText,
+                    presentation.statusText, presentation.targetText, presentation.sourceText
+                ].compactMap { $0 }
+                for text in texts {
+                    for word in forbidden {
+                        XCTAssertFalse(text.contains(word), "\(language.rawValue): \(text)")
+                    }
+                }
+            }
+        }
+    }
+
+    func testWeeklyForecastCardRendersAtMenuBarWidth() throws {
+        try render(
+            GoldWeeklyForecastCard(
+                snapshot: makeWeeklySnapshot(direction: .up),
+                isLoading: false
+            )
+            .padding(10)
+            .frame(width: 304)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .environment(\.colorScheme, .light),
+            size: NSSize(width: 304, height: 420),
+            filename: "coolrun-weekly-forecast-preview.png"
+        )
+    }
+
     private func render<Content: View>(
         _ content: Content,
         size: NSSize,

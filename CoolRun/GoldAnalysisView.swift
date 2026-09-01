@@ -51,6 +51,9 @@ final class GoldAnalysisViewModel {
     private(set) var globalSnapshot: GoldGlobalSnapshot?
     private(set) var marketIntelligence: GoldMarketIntelligenceSnapshot?
     private(set) var isMarketIntelligenceLoading = false
+    // 一周方向预测：独立于 30 分钟预测学习和交易策略
+    private(set) var weeklyForecastSnapshot: GoldWeeklyForecastSnapshot?
+    private(set) var isWeeklyForecastLoading = false
 
     /// 事件影响解释，只用于展示，不参与策略加权
     var eventImpact: GoldEventImpact? {
@@ -58,18 +61,25 @@ final class GoldAnalysisViewModel {
     }
 
     private let marketIntelligenceService: any GoldMarketIntelligenceProviding
+    private let weeklyForecastService: any GoldWeeklyForecastProviding
+    private let weeklyForecastStore: GoldWeeklyForecastStore
     private let marketDataService = GoldMarketDataService.shared
     private let learningStore = GoldPredictionLearningStore.shared
     private var analysisTask: Task<Void, Never>?
     private var remoteChartTask: Task<Void, Never>?
     private var multiSourceTask: Task<Void, Never>?
     private var marketIntelligenceTask: Task<Void, Never>?
+    private var weeklyForecastTask: Task<Void, Never>?
     private var lastRecordsSignature = ""
 
     init(
-        marketIntelligenceService: any GoldMarketIntelligenceProviding = GoldMarketIntelligenceService()
+        marketIntelligenceService: any GoldMarketIntelligenceProviding = GoldMarketIntelligenceService(),
+        weeklyForecastService: any GoldWeeklyForecastProviding = GoldWeeklyForecastService(),
+        weeklyForecastStore: GoldWeeklyForecastStore = .shared
     ) {
         self.marketIntelligenceService = marketIntelligenceService
+        self.weeklyForecastService = weeklyForecastService
+        self.weeklyForecastStore = weeklyForecastStore
     }
 
     func refresh(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
@@ -129,6 +139,7 @@ final class GoldAnalysisViewModel {
             self?.isMarketIntelligenceLoading = false
             self?.lastRecordsSignature = ""
             self?.refresh(records: records, candlePeriod: candlePeriod)
+            self?.refreshWeeklyForecast(records: records, eventImpact: snapshot.eventImpact)
         }
     }
 
@@ -182,6 +193,79 @@ final class GoldAnalysisViewModel {
         }
     }
 
+    /// 一周方向预测刷新链路：
+    /// 1. 先用本地记录做第 7 天验证；
+    /// 2. 当天已有正式记录（Store 每日冻结）时直接还原，不发请求；
+    /// 3. 否则取消旧任务并调用 service，ready 后写入 Store；
+    /// 迟到的取消任务结果不得覆盖快照。
+    func refreshWeeklyForecast(records: [GoldPriceRecord], eventImpact: GoldEventImpact?) {
+        let language = AppSettings.shared.language
+        let now = Date()
+
+        // 本地价格记录到达后顺手验证待验证记录
+        weeklyForecastStore.validate(with: records, now: now)
+
+        // 当天已有同模型版本正式记录：冻结展示，不再请求
+        if let frozen = weeklyForecastStore.record(
+            forShanghaiDay: now,
+            modelVersion: GoldWeeklyForecastPolicy.modelVersion
+        ) {
+            weeklyForecastTask?.cancel()
+            weeklyForecastTask = nil
+            weeklyForecastSnapshot = frozen.frozenSnapshot(
+                message: LocalizedString.l(
+                    language,
+                    en: "Today's forecast was frozen at first publication",
+                    zh: "今日预测已按当日首次发布冻结",
+                    ja: "本日の予測は初回公開時点で固定されています",
+                    ko: "오늘의 예측은 첫 게시 시점에 고정되었습니다"
+                )
+            )
+            isWeeklyForecastLoading = false
+            return
+        }
+
+        // 最后有效价格 + 来源作为当前价输入
+        guard let lastRecord = records.last(where: { $0.price.isFinite && $0.price > 0 }) else {
+            weeklyForecastTask?.cancel()
+            weeklyForecastTask = nil
+            weeklyForecastSnapshot = .unavailable(
+                status: .sourceUnavailable,
+                message: LocalizedString.l(
+                    language,
+                    en: "Current gold price is unavailable",
+                    zh: "当前金价不可用",
+                    ja: "現在の金価格を利用できません",
+                    ko: "현재 금 가격을 사용할 수 없습니다"
+                ),
+                now: now
+            )
+            isWeeklyForecastLoading = false
+            return
+        }
+
+        weeklyForecastTask?.cancel()
+        isWeeklyForecastLoading = true
+
+        let service = weeklyForecastService
+        let request = GoldWeeklyForecastRequest(
+            currentPrice: lastRecord.price,
+            currentPriceSource: lastRecord.source,
+            eventImpact: eventImpact,
+            now: now
+        )
+        weeklyForecastTask = Task { [weak self] in
+            let snapshot = await service.fetchSnapshot(request: request, language: language)
+            guard !Task.isCancelled else { return }
+
+            self?.weeklyForecastSnapshot = snapshot
+            if snapshot.status == .ready {
+                self?.weeklyForecastStore.observe(snapshot: snapshot)
+            }
+            self?.isWeeklyForecastLoading = false
+        }
+    }
+
     func cancel() {
         analysisTask?.cancel()
         analysisTask = nil
@@ -191,10 +275,13 @@ final class GoldAnalysisViewModel {
         multiSourceTask = nil
         marketIntelligenceTask?.cancel()
         marketIntelligenceTask = nil
+        weeklyForecastTask?.cancel()
+        weeklyForecastTask = nil
         lastRecordsSignature = ""
         isLoading = false
         isMarketIntelligenceLoading = false
         isRemoteChartLoading = false
+        isWeeklyForecastLoading = false
     }
 
     private func apply(_ result: GoldAnalysisResult, sourceRecords: [GoldPriceRecord]) {
@@ -508,6 +595,11 @@ struct GoldAnalysisView: View {
                         GoldDecisionSummaryCard(report: advancedReport)
                     }
 
+                    GoldWeeklyForecastCard(
+                        snapshot: viewModel.weeklyForecastSnapshot,
+                        isLoading: viewModel.isWeeklyForecastLoading
+                    )
+
                     marketChartCard
 
                     if !viewModel.multiSourcePrices.isEmpty {
@@ -571,6 +663,7 @@ struct GoldAnalysisView: View {
         }
         .onChange(of: store.records) { _, records in
             viewModel.refresh(records: records, candlePeriod: candlePeriod)
+            viewModel.refreshWeeklyForecast(records: records, eventImpact: viewModel.eventImpact)
         }
         .onChange(of: chartRange) { _, range in
             viewModel.refreshRemoteChart(range: range)

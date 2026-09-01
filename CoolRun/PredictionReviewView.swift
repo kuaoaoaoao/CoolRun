@@ -3,15 +3,62 @@ import Observation
 
 /// 完整预测复盘页
 /// 展示所有预测历史、支持多维筛选、每条预测的证据快照。
+/// 顶部 segmented 切换 30 分钟预测与一周预测复盘；两个 Store 的 summary 独立展示，不相加。
 @MainActor
 struct PredictionReviewView: View {
     @State private var store = GoldPredictionLearningStore.shared
     @State private var priceStore = GoldPriceStore.shared
     @State private var expandedRecordID: UUID?
+    @State private var reviewScope: ReviewScope = .thirtyMinutes
     @ObservedObject private var appSettings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
-    
+
+    enum ReviewScope: String, CaseIterable, Identifiable {
+        case thirtyMinutes
+        case weekly
+
+        var id: String { rawValue }
+
+        func title(lang: AppLanguage) -> String {
+            switch self {
+            case .thirtyMinutes:
+                return LocalizedString.l(lang, en: "30 min", zh: "30 分钟", ja: "30分", ko: "30분")
+            case .weekly:
+                return LocalizedString.l(lang, en: "1 week", zh: "一周", ja: "1週間", ko: "1주")
+            }
+        }
+    }
+
     var body: some View {
+        VStack(spacing: 10) {
+            scopePicker
+
+            switch reviewScope {
+            case .thirtyMinutes:
+                thirtyMinutesContent
+            case .weekly:
+                GoldWeeklyForecastReviewView()
+            }
+        }
+        .padding(.vertical, 6)
+        .background(colorScheme == .dark ? Color.black.opacity(0.28) : Color.white.opacity(0.72))
+    }
+
+    private var scopePicker: some View {
+        Picker(
+            LocalizedString.l(appSettings.language, en: "Scope", zh: "范围", ja: "範囲", ko: "범위"),
+            selection: $reviewScope
+        ) {
+            ForEach(ReviewScope.allCases) { scope in
+                Text(scope.title(lang: appSettings.language)).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 160)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var thirtyMinutesContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 10) {
                 summaryCard
@@ -23,7 +70,6 @@ struct PredictionReviewView: View {
             }
             .padding(.vertical, 6)
         }
-        .background(colorScheme == .dark ? Color.black.opacity(0.28) : Color.white.opacity(0.72))
     }
     
     // MARK: - Summary Card

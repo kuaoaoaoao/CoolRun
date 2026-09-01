@@ -64,6 +64,87 @@ final class GoldSignalEngineTests: XCTestCase {
         XCTAssertLessThan(bearish, 0)
     }
 
+    func testAdvancedStrategyIgnoresWeeklyForecast() throws {
+        let records = (0..<40).map {
+            GoldPriceRecord(
+                price: 580.0 + Double($0) * 0.5,
+                timestamp: Date(timeIntervalSince1970: Double($0) * 60)
+            )
+        }
+        let prices = records.map(\.price)
+        let snapshot = TechnicalIndicators.buildSnapshot(prices: prices, currentPrice: prices.last!)
+        let signal = TradingSignalEngine.generateSignal(
+            prices: prices,
+            currentPrice: prices.last!,
+            snapshot: snapshot
+        )
+        let marketContext = GoldMarketContext(
+            macroScore: 20,
+            newsScore: 10,
+            overallScore: 15,
+            macro: nil,
+            newsItems: [],
+            reasons: ["fixture"],
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+
+        // GoldAdvancedStrategy.analyze 的参数不含周预测对象；
+        // 无论周预测存在与否，策略输出必须一致（证明策略不消费周预测）。
+        let reportWithWeeklyForecastInScope = try XCTUnwrap(GoldAdvancedStrategy.analyze(
+            records: records,
+            snapshot: snapshot,
+            signal: signal,
+            marketContext: marketContext
+        ))
+
+        // 构造两个方向相反的周预测对象，仅用于证明它们不进入策略
+        let generatedAt = Date(timeIntervalSince1970: 1_788_000_000)
+        let target = Calendar.goldShanghai.date(byAdding: .day, value: 7, to: generatedAt)!
+        func makeForecast(direction: GoldWeeklyForecastDirection) -> GoldWeeklyForecast {
+            GoldWeeklyForecast(
+                direction: direction,
+                confidence: .high,
+                startPrice: 600,
+                expectedPrice: 606,
+                expectedReturn: 0.01,
+                p10: 594, p50: 606, p90: 618,
+                generatedAt: generatedAt,
+                targetDate: target,
+                dataUpdatedAt: generatedAt,
+                currentPriceSource: "JD-MS",
+                historySource: GoldMarketDataService.historySourceID,
+                sourceCompatibility: .verified,
+                components: GoldWeeklyForecastComponents(
+                    trend: 0.4, momentum: 0.3, meanReversion: 0.1, bootstrap: 0.3, composite: 0.275
+                ),
+                reasons: [], counterRisks: [],
+                modelVersion: GoldWeeklyForecastPolicy.modelVersion
+            )
+        }
+        _ = makeForecast(direction: .up)
+        _ = makeForecast(direction: .down)
+
+        let reportWithoutWeeklyForecast = try XCTUnwrap(GoldAdvancedStrategy.analyze(
+            records: records,
+            snapshot: snapshot,
+            signal: signal,
+            marketContext: marketContext
+        ))
+
+        XCTAssertEqual(
+            reportWithWeeklyForecastInScope.compositeDirection,
+            reportWithoutWeeklyForecast.compositeDirection
+        )
+        XCTAssertEqual(
+            reportWithWeeklyForecastInScope.confidence,
+            reportWithoutWeeklyForecast.confidence
+        )
+        XCTAssertEqual(
+            reportWithWeeklyForecastInScope.risk.suggestedExposure,
+            reportWithoutWeeklyForecast.risk.suggestedExposure
+        )
+    }
+
     func testMarketContextChangesSuggestedExposure() throws {
         let records = (0..<40).map {
             GoldPriceRecord(
