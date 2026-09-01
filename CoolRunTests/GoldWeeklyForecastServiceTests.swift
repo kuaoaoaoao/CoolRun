@@ -626,4 +626,91 @@ final class GoldWeeklyForecastServiceTests: XCTestCase {
         XCTAssertTrue(snapshot.forecast?.expectedPrice.isFinite ?? false)
         XCTAssertTrue((snapshot.forecast?.p10.isFinite ?? false) && (snapshot.forecast?.p90.isFinite ?? false))
     }
+
+    // MARK: - 审计修复：validationFailed 缓存
+
+    /// 门槛未通过的结论在同一日内是结构性的，TTL 内不得重复拉取历史并重跑回测。
+    func testValidationFailedSnapshotIsCachedWithinTTL() async {
+        let stub = HistoryProviderStub(
+            points: makeHistoryPoints(count: 260, endingAt: now)
+        )
+        let service = makeService(history: stub, backtest: makeFailingBacktest())
+        let first = await service.fetchSnapshot(request: makeRequest(), language: .chinese)
+        let second = await service.fetchSnapshot(request: makeRequest(price: 601), language: .chinese)
+        let count = await stub.callCount
+        XCTAssertEqual(first.status, .validationFailed)
+        XCTAssertEqual(second.status, .validationFailed)
+        XCTAssertEqual(count, 1, "validationFailed 快照应在 TTL 内缓存，避免重复拉取一年历史")
+    }
+
+    /// 网络失败是瞬时状态，不得被缓存阻断重试。
+    func testSourceUnavailableSnapshotIsNotCached() async {
+        let stub = HistoryProviderStub(error: StubError())
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        _ = await service.fetchSnapshot(request: makeRequest(), language: .chinese)
+        _ = await service.fetchSnapshot(request: makeRequest(), language: .chinese)
+        let count = await stub.callCount
+        XCTAssertEqual(count, 2, "sourceUnavailable 快照不得缓存，网络恢复后要能立即重试")
+    }
+
+    // MARK: - 审计修复：样本积累中提示
+
+    /// 唯一失败原因是样本数时，提示"样本积累中"而不是笼统的门槛失败。
+    func testSampleAccumulationMessageWhenResolvedSamplesIsOnlyReason() async {
+        let backtest = GoldWeeklyForecastBacktestSummary(
+            resolvedCount: 17,
+            classCounts: [.up: 7, .flat: 6, .down: 4],
+            overallAccuracy: 0.5,
+            balancedAccuracy: 0.45,
+            majorityBaselineAccuracy: 0.4,
+            meanAbsoluteReturnError: 0.01,
+            confusionMatrix: [:],
+            passedReleaseGate: false,
+            failureReasons: ["resolved_samples"]
+        )
+        let stub = HistoryProviderStub(points: makeHistoryPoints(count: 260, endingAt: now))
+        let service = makeService(history: stub, backtest: backtest)
+        let snapshot = await service.fetchSnapshot(request: makeRequest(), language: .chinese)
+        XCTAssertEqual(snapshot.status, .validationFailed)
+        XCTAssertNil(snapshot.forecast, "门槛未通过时不得发布 forecast")
+        XCTAssertTrue(snapshot.message.contains("积累"), "样本不足应提示积累中：\(snapshot.message)")
+    }
+
+    /// 混合失败原因（含质量类门槛）时保持原有详细文案。
+    func testMixedFailureReasonsKeepDetailedMessage() async {
+        let stub = HistoryProviderStub(points: makeHistoryPoints(count: 260, endingAt: now))
+        let service = makeService(history: stub, backtest: makeFailingBacktest())
+        let snapshot = await service.fetchSnapshot(request: makeRequest(), language: .chinese)
+        XCTAssertEqual(snapshot.status, .validationFailed)
+        XCTAssertTrue(snapshot.message.contains("resolved_samples"), "混合原因需列出机器可读原因：\(snapshot.message)")
+    }
+
+    // MARK: - 审计修复：seed 稳定性
+
+    /// 同一上海日内（即使跨过 6 小时缓存 TTL）引擎 seed 必须一致，
+    /// 保证"同输入同输出"不依赖缓存存在。
+    func testSeedIsStableAcrossSameShanghaiDayBeyondCacheTTL() async {
+        let calendar = Calendar.goldShanghai
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 8, day: 31, hour: 8))!
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 8, day: 31, hour: 22))!
+        let box = InputBox()
+        let stub = HistoryProviderStub(
+            points: makeHistoryPoints(count: 260, endingAt: morning)
+        )
+        let service = GoldWeeklyForecastService(
+            historyProvider: stub,
+            modelRunner: GoldWeeklyForecastModelRunner(
+                makeDraft: { input in
+                    box.append(input)
+                    return self.makeDraft()
+                },
+                backtest: { _, _ in self.makePassingBacktest() }
+            )
+        )
+        _ = await service.fetchSnapshot(request: makeRequest(at: morning), language: .chinese)
+        _ = await service.fetchSnapshot(request: makeRequest(at: evening), language: .chinese)
+        let inputs = box.recorded
+        XCTAssertEqual(inputs.count, 2, "间隔超过 TTL 应重新执行流水线")
+        XCTAssertEqual(inputs[0].seed, inputs[1].seed, "同一上海日内 seed 必须一致")
+    }
 }

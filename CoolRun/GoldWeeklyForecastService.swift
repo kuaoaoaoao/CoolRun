@@ -196,7 +196,10 @@ extension GoldWeeklyForecastService {
         }
 
         // 5. 走步回测；未过发布门槛保留 backtest 并返回 validationFailed。
-        let seed = UInt64(bitPattern: Int64(request.now.timeIntervalSince1970))
+        // seed 从上海日 key 派生而非请求时刻：同一自然日内多次计算结果一致，
+        // 不依赖缓存存在；跨日自然轮换。
+        let dayKey = Calendar.goldShanghai.startOfDay(for: request.now)
+        let seed = UInt64(bitPattern: Int64(dayKey.timeIntervalSince1970))
         let backtest = modelRunner.backtest(quality.closes, seed)
         guard backtest.passedReleaseGate else {
             return GoldWeeklyForecastSnapshot(
@@ -436,6 +439,17 @@ extension GoldWeeklyForecastService {
         _ language: AppLanguage,
         reasons: [String]
     ) -> String {
+        // 样本数是唯一失败原因时属于结构性积累状态，用更友好的提示；
+        // 不改变门槛本身，状态仍是 validationFailed 且不发布 forecast。
+        if reasons == ["resolved_samples"] {
+            return LocalizedString.l(
+                language,
+                en: "Walk-forward samples are still accumulating; more history is required before publishing",
+                zh: "走步回测样本仍在积累中，需要更多历史数据后才可发布",
+                ja: "ウォークフォワードのサンプルはまだ蓄積中です。公開にはさらに履歴が必要です",
+                ko: "워크포워드 샘플이 아직 축적 중입니다. 게시하려면 더 많은 과거 데이터가 필요합니다"
+            )
+        }
         let template = LocalizedString.l(
             language,
             en: "Walk-forward backtest did not pass the release gate: %@",
@@ -501,8 +515,10 @@ private actor GoldWeeklyForecastServiceCache {
 
     private func finish(requestKey: String, snapshot: GoldWeeklyForecastSnapshot) {
         inflight[requestKey] = nil
-        // 只缓存 ready 快照（含基础信心）；事件修正在每次请求后独立应用。
-        guard snapshot.status == .ready else { return }
+        // 缓存 ready（含基础信心）与 validationFailed（门槛结论当日结构性成立）快照；
+        // 事件修正在每次请求后独立应用。sourceUnavailable 等瞬时状态不缓存，
+        // 保证网络恢复后能立即重试。
+        guard snapshot.status == .ready || snapshot.status == .validationFailed else { return }
         entry = Entry(
             requestKey: requestKey,
             snapshot: snapshot,
