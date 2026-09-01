@@ -106,6 +106,29 @@ final class GoldWeeklyForecastEngineTests: XCTestCase {
         XCTAssertLessThanOrEqual(draft.p50, draft.p90)
     }
 
+    // MARK: - Task 8 Step 3：模型版本回归
+
+    func testModelVersionMatchesPinnedValue() throws {
+        // 固定 220 点 fixture + seed=42 的完整输出快照。
+        // 任何改变 direction/components/P10/P50/P90 的算法或权重修改，
+        // 必须同时提升 GoldWeeklyForecastPolicy.modelVersion 并更新本快照，
+        // 不允许静默改变历史模型语义。
+        let closes = makeNoisyCloses(count: 220)
+        let draft = try XCTUnwrap(
+            GoldWeeklyForecastEngine.makeDraft(makeEngineInput(closes: closes, seed: 42))
+        )
+        XCTAssertEqual(GoldWeeklyForecastPolicy.modelVersion, "gold-weekly-2026.08.30.1")
+        XCTAssertEqual(draft.direction, .flat)
+        XCTAssertEqual(draft.components.trend, 0.406_137_461_772_287_2, accuracy: 0.000_001)
+        XCTAssertEqual(draft.components.momentum, -0.706_147_453_294_348_9, accuracy: 0.000_001)
+        XCTAssertEqual(draft.components.meanReversion, 0.370_277_142_395_021_6, accuracy: 0.000_001)
+        XCTAssertEqual(draft.components.bootstrap, 0.052_5, accuracy: 0.000_001)
+        XCTAssertEqual(draft.components.composite, 0.034_277_819_655_966_5, accuracy: 0.000_001)
+        XCTAssertEqual(draft.p10, 589.542_981_486_232_6, accuracy: 0.000_001)
+        XCTAssertEqual(draft.p50, 595.431_403_882_729_7, accuracy: 0.000_001)
+        XCTAssertEqual(draft.p90, 601.985_602_334_002_2, accuracy: 0.000_001)
+    }
+
     // MARK: - 确定性 fixture
 
     private func makeCloses(

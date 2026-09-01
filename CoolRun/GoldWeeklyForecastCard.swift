@@ -4,7 +4,7 @@ import AppKit
 // MARK: - 纯文案映射（可测试）
 
 /// 一周预测卡片的展示文本转换：只做文案，不做推断。
-/// 任何状态都不生成交易动作（买入/卖出/加仓/减仓）。
+/// 任何状态都不输出交易操作指令，只做统计预测展示。
 struct GoldWeeklyForecastPresentation: Equatable {
     let title: String
     let directionText: String?

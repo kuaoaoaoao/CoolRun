@@ -391,4 +391,239 @@ final class GoldWeeklyForecastServiceTests: XCTestCase {
         let callsAfterExpiry = await stub.callCount
         XCTAssertEqual(callsAfterExpiry, 2)
     }
+
+    // MARK: - Task 8：日历边界回归
+
+    /// 记录引擎输入的线程安全盒子。
+    private final class InputBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var inputs: [GoldWeeklyForecastEngineInput] = []
+
+        func append(_ input: GoldWeeklyForecastEngineInput) {
+            lock.lock()
+            defer { lock.unlock() }
+            inputs.append(input)
+        }
+
+        var recorded: [GoldWeeklyForecastEngineInput] {
+            lock.lock()
+            defer { lock.unlock() }
+            return inputs
+        }
+    }
+
+    /// 覆盖月末、年末、闰年 2 月、周末和普通工作日：
+    /// targetDate 必须是 generatedAt 的上海日历第 7 天。
+    func testTargetDateIsSeventhShanghaiCalendarDayAcrossBoundaries() async {
+        let calendar = Calendar.goldShanghai
+        let boundaries: [(Date, Date)] = [
+            // 月末：2026-01-31 → 2026-02-07
+            (calendar.date(from: DateComponents(year: 2026, month: 1, day: 31, hour: 12))!,
+             calendar.date(from: DateComponents(year: 2026, month: 2, day: 7, hour: 12))!),
+            // 年末：2026-12-31 → 2027-01-07
+            (calendar.date(from: DateComponents(year: 2026, month: 12, day: 31, hour: 12))!,
+             calendar.date(from: DateComponents(year: 2027, month: 1, day: 7, hour: 12))!),
+            // 闰年 2 月：2028-02-28 → 2028-03-06
+            (calendar.date(from: DateComponents(year: 2028, month: 2, day: 28, hour: 12))!,
+             calendar.date(from: DateComponents(year: 2028, month: 3, day: 6, hour: 12))!),
+            // 周日：2026-08-30 → 2026-09-06
+            (calendar.date(from: DateComponents(year: 2026, month: 8, day: 30, hour: 12))!,
+             calendar.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 12))!),
+            // 周二：2026-09-01 → 2026-09-08
+            (calendar.date(from: DateComponents(year: 2026, month: 9, day: 1, hour: 12))!,
+             calendar.date(from: DateComponents(year: 2026, month: 9, day: 8, hour: 12))!)
+        ]
+
+        for (generatedAt, expectedTarget) in boundaries {
+            let stub = HistoryProviderStub(
+                points: makeHistoryPoints(count: 130, endingAt: generatedAt)
+            )
+            let box = InputBox()
+            let fixedDraft = makeDraft()
+            let service = GoldWeeklyForecastService(
+                historyProvider: stub,
+                modelRunner: GoldWeeklyForecastModelRunner(
+                    makeDraft: { input in
+                        box.append(input)
+                        return fixedDraft
+                    },
+                    backtest: { _, _ in self.makePassingBacktest() }
+                )
+            )
+            let snapshot = await service.fetchSnapshot(
+                request: makeRequest(at: generatedAt), language: .chinese
+            )
+            XCTAssertEqual(snapshot.status, .ready)
+
+            let inputs = box.recorded
+            XCTAssertEqual(inputs.count, 1)
+            let input = inputs[0]
+            XCTAssertEqual(input.generatedAt, generatedAt)
+            XCTAssertEqual(input.targetDate, expectedTarget)
+            XCTAssertEqual(
+                calendar.dateComponents([.day], from: input.generatedAt, to: input.targetDate).day,
+                GoldWeeklyForecastPolicy.horizonDays
+            )
+        }
+    }
+
+    // MARK: - Task 8：数据故障矩阵
+
+    func testEmptyHistoryIsInsufficientHistory() async {
+        let stub = HistoryProviderStub(points: [])
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        let snapshot = await service.fetchSnapshot(
+            request: makeRequest(), language: .chinese
+        )
+        XCTAssertEqual(snapshot.status, .insufficientHistory)
+        XCTAssertTrue(snapshot.message.contains("0"))
+        XCTAssertNil(snapshot.forecast)
+    }
+
+    func testAllOutlierHistoryIsInsufficientHistory() async {
+        // 相邻日价格交替相差 20%（>8%），大部分点被剔除，剩余不足 120 个。
+        let calendar = Calendar.goldShanghai
+        let start = calendar.startOfDay(for: now)
+        let points = (0..<130).map { index in
+            GoldRemotePricePoint(
+                price: index % 2 == 0 ? 500 : 600,
+                timestamp: calendar.date(byAdding: .day, value: -index, to: start)!
+            )
+        }
+        let stub = HistoryProviderStub(points: points)
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        let snapshot = await service.fetchSnapshot(
+            request: makeRequest(), language: .chinese
+        )
+        XCTAssertEqual(snapshot.status, .insufficientHistory)
+        XCTAssertNil(snapshot.forecast)
+    }
+
+    func testHistoryCountBoundariesAroundMinimum() async {
+        for (count, expectedReady) in [(120, true), (119, false)] {
+            let stub = HistoryProviderStub(
+                points: makeHistoryPoints(count: count, endingAt: now)
+            )
+            let service = makeService(history: stub, backtest: makePassingBacktest())
+            let snapshot = await service.fetchSnapshot(
+                request: makeRequest(), language: .chinese
+            )
+            XCTAssertEqual(snapshot.status == .ready, expectedReady, "count \(count)")
+        }
+    }
+
+    func testHistoryCountBoundariesAroundNormalDailyCloses() async {
+        // 180 点且分量同向 → medium；179 点 → low。
+        for (count, expectedConfidence) in [(180, GoldWeeklyForecastConfidence.medium),
+                                            (179, GoldWeeklyForecastConfidence.low)] {
+            let stub = HistoryProviderStub(
+                points: makeHistoryPoints(count: count, endingAt: now)
+            )
+            let service = makeService(history: stub, backtest: makePassingBacktest())
+            let snapshot = await service.fetchSnapshot(
+                request: makeRequest(), language: .chinese
+            )
+            XCTAssertEqual(snapshot.status, .ready, "count \(count)")
+            XCTAssertEqual(snapshot.forecast?.confidence, expectedConfidence, "count \(count)")
+        }
+    }
+
+    func testHistoryCountBoundariesAroundHighDailyCloses() async {
+        // 240 点且回测指标达标 → high；239 点 → medium。
+        for (count, expectedConfidence) in [(240, GoldWeeklyForecastConfidence.high),
+                                            (239, GoldWeeklyForecastConfidence.medium)] {
+            let stub = HistoryProviderStub(
+                points: makeHistoryPoints(count: count, endingAt: now)
+            )
+            let service = makeService(history: stub, backtest: makePassingBacktest())
+            let snapshot = await service.fetchSnapshot(
+                request: makeRequest(), language: .chinese
+            )
+            XCTAssertEqual(snapshot.status, .ready, "count \(count)")
+            XCTAssertEqual(snapshot.forecast?.confidence, expectedConfidence, "count \(count)")
+        }
+    }
+
+    func testStalenessBoundaryAtNinetySixHours() async {
+        let calendar = Calendar.goldShanghai
+        // 上海午夜作为 now，使 latestAge 与日历日对齐
+        let nowMidnight = calendar.startOfDay(for: now)
+
+        // 最新收盘在 95:59 前 → 不陈旧
+        let fresh = HistoryProviderStub(
+            points: makeHistoryPoints(
+                count: 130, endingAt: nowMidnight.addingTimeInterval(-96 * 3600 + 60)
+            )
+        )
+        let freshService = makeService(history: fresh, backtest: makePassingBacktest())
+        let freshSnapshot = await freshService.fetchSnapshot(
+            request: makeRequest(at: nowMidnight), language: .chinese
+        )
+        XCTAssertEqual(freshSnapshot.status, .ready)
+
+        // 最新收盘在 96:01 后 → 陈旧
+        let stale = HistoryProviderStub(
+            points: makeHistoryPoints(
+                count: 130, endingAt: nowMidnight.addingTimeInterval(-96 * 3600 - 60)
+            )
+        )
+        let staleService = makeService(history: stale, backtest: makePassingBacktest())
+        let staleSnapshot = await staleService.fetchSnapshot(
+            request: makeRequest(at: nowMidnight), language: .chinese
+        )
+        XCTAssertEqual(staleSnapshot.status, .staleData)
+        XCTAssertNil(staleSnapshot.forecast)
+    }
+
+    private func makeGapHistory(totalDays: Int, removedDays: Int, endingAt: Date) -> [GoldRemotePricePoint] {
+        let calendar = Calendar.goldShanghai
+        var offsets = Array(0..<totalDays)
+        offsets.removeSubrange(11..<(11 + removedDays))
+        return offsets.map { offset in
+            let timestamp = calendar.date(byAdding: .day, value: offset - (totalDays - 1), to: endingAt)!
+            return GoldRemotePricePoint(price: 580 + Double(offset) * 0.1, timestamp: timestamp)
+        }
+    }
+
+    func testFifteenDayGapLowersConfidenceAndAddsCounterRisk() async {
+        // 去掉 14 天 → 缺口 15 天 → 信心下调一级并追加对冲风险。
+        let stub = HistoryProviderStub(
+            points: makeGapHistory(totalDays: 200, removedDays: 14, endingAt: now)
+        )
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        let snapshot = await service.fetchSnapshot(
+            request: makeRequest(), language: .chinese
+        )
+        XCTAssertEqual(snapshot.status, .ready)
+        XCTAssertEqual(snapshot.forecast?.confidence, .low)
+        XCTAssertTrue(snapshot.forecast?.counterRisks.contains { $0.contains("15") } ?? false)
+    }
+
+    func testFourteenDayGapDoesNotLowerConfidence() async {
+        // 去掉 13 天 → 缺口 14 天 → 不触发降级。
+        let stub = HistoryProviderStub(
+            points: makeGapHistory(totalDays: 200, removedDays: 13, endingAt: now)
+        )
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        let snapshot = await service.fetchSnapshot(
+            request: makeRequest(), language: .chinese
+        )
+        XCTAssertEqual(snapshot.status, .ready)
+        XCTAssertEqual(snapshot.forecast?.confidence, .medium)
+        XCTAssertFalse(snapshot.forecast?.counterRisks.contains { $0.contains("14") } ?? true)
+    }
+
+    func testNonFiniteHistoryPricesAreRejected() async {
+        var points = makeHistoryPoints(count: 260, endingAt: now)
+        points[10] = GoldRemotePricePoint(price: .nan, timestamp: points[10].timestamp)
+        points[20] = GoldRemotePricePoint(price: .infinity, timestamp: points[20].timestamp)
+        let stub = HistoryProviderStub(points: points)
+        let service = makeService(history: stub, backtest: makePassingBacktest())
+        let snapshot = await service.fetchSnapshot(
+            request: makeRequest(), language: .chinese
+        )
+        XCTAssertEqual(snapshot.status, .ready)
+        XCTAssertTrue(snapshot.forecast?.expectedPrice.isFinite ?? false)
+        XCTAssertTrue((snapshot.forecast?.p10.isFinite ?? false) && (snapshot.forecast?.p90.isFinite ?? false))
+    }
 }
