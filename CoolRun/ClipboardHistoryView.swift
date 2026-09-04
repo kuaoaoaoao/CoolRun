@@ -7,6 +7,7 @@ struct ClipboardHistoryView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var query = ""
+    @AppStorage(ClipboardQuickPasteController.enabledDefaultsKey) private var quickPasteEnabled = false
     @State private var entryPendingDelete: ClipboardHistoryEntry?
     @State private var showsClearConfirmation = false
     @State private var copiedEntryID: UUID?
@@ -29,6 +30,9 @@ struct ClipboardHistoryView: View {
         VStack(spacing: 8) {
             header
             privacyBanner
+            if !quickPasteEnabled {
+                quickPasteBanner
+            }
             searchField
 
             if visibleEntries.isEmpty {
@@ -148,6 +152,39 @@ struct ClipboardHistoryView: View {
         .padding(.vertical, 7)
         .background(
             (store.isMonitoringEnabled ? AppTheme.healthy : AppTheme.warning).opacity(colorScheme == .dark ? 0.12 : 0.08),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+
+    /// 提示用户到设置中开启 ⌃⌘1~9 快捷粘贴（功能默认关闭）。
+    private var quickPasteBanner: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "keyboard")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(LocalizedString.settings("quick_paste_banner_title", lang: lang))
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                Text(LocalizedString.settings("quick_paste_banner_desc", lang: lang))
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            }
+
+            Spacer(minLength: 2)
+
+            SettingsLink {
+                Text(LocalizedString.settings("quick_paste_banner_enable", lang: lang))
+                    .font(.system(size: 9.5, weight: .semibold))
+            }
+            .buttonStyle(.link)
+            .font(.system(size: 9.5))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            AppTheme.accent.opacity(colorScheme == .dark ? 0.12 : 0.08),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
     }

@@ -3,10 +3,10 @@ import Foundation
 
 /// 跨平台的轻量数据同步层，基于 iCloud 键值存储（`NSUbiquitousKeyValueStore`）。
 ///
-/// 设计目标：让 macOS / iOS / watchOS 上登录同一 iCloud 账号的 CoolRun 各端，
+/// 设计目标：让 macOS / iOS 上登录同一 iCloud 账号的 CoolRun 各端，
 /// 共享少量“小数据”——目前是黄金持仓（克数、成本价）与英语打卡状态。
 ///
-/// - 金价本身不走同步：手表可直接调用公开 API 拉取实时价，仅需从这里读持仓即可本地算盈亏。
+/// - 金价本身不走同步：各端可直接调用公开 API 拉取实时价，仅需从这里读持仓即可本地算盈亏。
 /// - 需要在各 Target 开启 iCloud「Key-value storage」能力后才会真正跨设备同步；
 ///   未开启能力时本类会降级为“仅本地”行为，不会崩溃。
 ///
@@ -35,7 +35,7 @@ final class CloudSyncStore: ObservableObject {
     private var observer: NSObjectProtocol?
     private var started = false
 
-    /// 供 watchOS / iOS 视图直接观察的镜像值（避免各端都去读 UserDefaults）。
+    /// 供应用视图直接观察的镜像值（避免各端都去读 UserDefaults）。
     @Published private(set) var values: [String: String] = [:]
 
     private init() {

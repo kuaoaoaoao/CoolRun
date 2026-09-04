@@ -70,6 +70,8 @@ struct SettingsView: View {
     @State private var selectedCategory: SettingsCategory = .general
     // 系统通知权限被拒时在到价提醒开关下提示，避免用户以为开了就能收到
     @State private var notificationPermissionDenied = false
+    @AppStorage(ClipboardQuickPasteController.enabledDefaultsKey) private var quickPasteEnabled = false
+    @State private var quickPasteAccessibilityGranted = AXIsProcessTrusted()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -282,6 +284,69 @@ struct SettingsView: View {
             }
 
             SettingsCard(
+                icon: "doc.on.clipboard.fill",
+                title: LocalizedString.settings("clipboard_quick_paste"),
+                description: LocalizedString.settings("clipboard_quick_paste_desc")
+            ) {
+                VStack(spacing: 0) {
+                    MonitorToggleRow(
+                        icon: "keyboard",
+                        title: LocalizedString.settings("quick_paste_toggle"),
+                        isOn: $quickPasteEnabled
+                    )
+                    Divider().padding(.horizontal, 14)
+                    Text(LocalizedString.settings("quick_paste_note"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                    if quickPasteEnabled {
+                        let conflicts = ClipboardQuickPasteController.shared.conflictedSlots
+                        if !conflicts.isEmpty {
+                            let combos = conflicts
+                                .sorted()
+                                .map { "⌃⌘\($0 + 1)" }
+                                .joined(separator: ", ")
+                            Divider().padding(.horizontal, 14)
+                            HStack(spacing: 10) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(AppTheme.warning)
+                                    .frame(width: 20)
+                                Text("\(LocalizedString.settings("quick_paste_conflict")) \(combos)")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AppTheme.warning)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                        }
+                    }
+
+                    if !quickPasteAccessibilityGranted {
+                        Divider().padding(.horizontal, 14)
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(AppTheme.warning)
+                                .frame(width: 20)
+                            Text(LocalizedString.settings("quick_paste_accessibility"))
+                                .font(.system(size: 12))
+                            Spacer()
+                            Button(LocalizedString.settings("quick_paste_grant")) {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                    openURL(url)
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                    }
+                }
+            }
+
+            SettingsCard(
                 icon: "hand.raised.fill",
                 title: LocalizedString.settings("privacy"),
                 description: LocalizedString.settings("privacy_desc")
@@ -305,7 +370,14 @@ struct SettingsView: View {
                 }
             }
         }
-        .onAppear { launchAtLogin.refresh() }
+        .onAppear {
+            launchAtLogin.refresh()
+            quickPasteAccessibilityGranted = AXIsProcessTrusted()
+        }
+        // 从系统设置授权回来后刷新权限状态，否则警告行不会消失
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            quickPasteAccessibilityGranted = AXIsProcessTrusted()
+        }
     }
 
     // MARK: - 监控设置内容

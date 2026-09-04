@@ -84,6 +84,15 @@ final class ClipboardHistoryStore {
         ingest(entry.text, at: now)
     }
 
+    /// Writes an entry to the pasteboard without promoting it to the top of
+    /// history, so quick-paste shortcuts keep a stable order.
+    func writeToPasteboard(id: UUID) {
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+        pasteboard.clearContents()
+        pasteboard.setString(entry.text, forType: .string)
+        lastChangeCount = pasteboard.changeCount
+    }
+
     func togglePin(id: UUID) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[index].isPinned.toggle()

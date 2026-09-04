@@ -119,6 +119,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         observeSettingsChanges()
         viewModel.start()
         ClipboardHistoryStore.shared.startMonitoring()
+        ClipboardQuickPasteController.shared.start()
         startIconAnimation()
         startGoldPriceUpdates()
 
@@ -259,6 +260,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         englishLearning.stop()
         GoldPriceStore.shared.flushToDisk()
         ClipboardHistoryStore.shared.stopMonitoring()
+        ClipboardQuickPasteController.shared.stop()
         UpdateChecker.shared.stopAutoCheck()
         if let windowCloseObserver {
             NotificationCenter.default.removeObserver(windowCloseObserver)

@@ -272,7 +272,6 @@ xcodebuild \
 ## 平台状态
 
 - `CoolRun`：主要维护的 macOS SwiftUI + AppKit 应用；Xcode project、target 和 scheme 均使用 `CoolRun`。
-- `CoolRun Watch`：watchOS 辅助目标，功能范围较小。
 - `coolrun-windows`：Tauri 实验版，不保证与 macOS 功能一致。
 - `coolrun-avalonia`：Avalonia 技术验证版本，不保证功能一致。
 

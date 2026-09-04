@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		CAFE01CAFE01CAFE01CAF001 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CAFE02CAFE02CAFE02CAF002 /* PostHog */; };
-		DA7B0000000000000000000D /* CoolRun Watch Complication.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DA7B00000000000000000006 /* CoolRun Watch Complication.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,34 +18,11 @@
 			remoteGlobalIDString = 8FCE25472FBE97330023FC83;
 			remoteInfo = CoolRun;
 		};
-		DA7B0000000000000000000A /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 8FCE25402FBE97330023FC83 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = DA7B00000000000000000002;
-			remoteInfo = "CoolRun Watch Complication";
-		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		DA7B0000000000000000000C /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				DA7B0000000000000000000D /* CoolRun Watch Complication.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		8FCE25482FBE97330023FC83 /* CoolRun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoolRun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* CoolRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoolRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DA7A00000000000000000006 /* CoolRun Watch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CoolRun Watch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		DA7B00000000000000000006 /* CoolRun Watch Complication.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "CoolRun Watch Complication.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -56,13 +32,6 @@
 				Info.plist,
 			);
 			target = 8FCE25472FBE97330023FC83 /* CoolRun */;
-		};
-		DA7B0000000000000000000E /* Exceptions for "CoolRun Watch Complication" folder in "CoolRun Watch Complication" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = DA7B00000000000000000002 /* CoolRun Watch Complication */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -78,19 +47,6 @@
 		A10000000000000000000002 /* CoolRunTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CoolRunTests;
-			sourceTree = "<group>";
-		};
-		DA7A00000000000000000001 /* CoolRun Watch */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "CoolRun Watch";
-			sourceTree = "<group>";
-		};
-		DA7B00000000000000000001 /* CoolRun Watch Complication */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				DA7B0000000000000000000E /* Exceptions for "CoolRun Watch Complication" folder in "CoolRun Watch Complication" target */,
-			);
-			path = "CoolRun Watch Complication";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -111,20 +67,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		DA7A00000000000000000004 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		DA7B00000000000000000004 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -133,8 +75,6 @@
 			children = (
 				8FCE254A2FBE97330023FC83 /* CoolRun */,
 				A10000000000000000000002 /* CoolRunTests */,
-				DA7A00000000000000000001 /* CoolRun Watch */,
-				DA7B00000000000000000001 /* CoolRun Watch Complication */,
 				8FCE25492FBE97330023FC83 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -144,8 +84,6 @@
 			children = (
 				8FCE25482FBE97330023FC83 /* CoolRun.app */,
 				A10000000000000000000001 /* CoolRunTests.xctest */,
-				DA7A00000000000000000006 /* CoolRun Watch.app */,
-				DA7B00000000000000000006 /* CoolRun Watch Complication.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -199,52 +137,6 @@
 			productReference = A10000000000000000000001 /* CoolRunTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		DA7A00000000000000000002 /* CoolRun Watch */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = DA7A00000000000000000009 /* Build configuration list for PBXNativeTarget "CoolRun Watch" */;
-			buildPhases = (
-				DA7A00000000000000000003 /* Sources */,
-				DA7A00000000000000000004 /* Frameworks */,
-				DA7A00000000000000000005 /* Resources */,
-				DA7B0000000000000000000C /* Embed Foundation Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				DA7B0000000000000000000B /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				DA7A00000000000000000001 /* CoolRun Watch */,
-			);
-			name = "CoolRun Watch";
-			packageProductDependencies = (
-			);
-			productName = "CoolRun Watch";
-			productReference = DA7A00000000000000000006 /* CoolRun Watch.app */;
-			productType = "com.apple.product-type.application";
-		};
-		DA7B00000000000000000002 /* CoolRun Watch Complication */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = DA7B00000000000000000009 /* Build configuration list for PBXNativeTarget "CoolRun Watch Complication" */;
-			buildPhases = (
-				DA7B00000000000000000003 /* Sources */,
-				DA7B00000000000000000004 /* Frameworks */,
-				DA7B00000000000000000005 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				DA7B00000000000000000001 /* CoolRun Watch Complication */,
-			);
-			name = "CoolRun Watch Complication";
-			packageProductDependencies = (
-			);
-			productName = "CoolRun Watch Complication";
-			productReference = DA7B00000000000000000006 /* CoolRun Watch Complication.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -261,12 +153,6 @@
 					A10000000000000000000006 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 8FCE25472FBE97330023FC83;
-					};
-					DA7A00000000000000000002 = {
-						CreatedOnToolsVersion = 26.5;
-					};
-					DA7B00000000000000000002 = {
-						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -289,8 +175,6 @@
 			targets = (
 				8FCE25472FBE97330023FC83 /* CoolRun */,
 				A10000000000000000000006 /* CoolRunTests */,
-				DA7A00000000000000000002 /* CoolRun Watch */,
-				DA7B00000000000000000002 /* CoolRun Watch Complication */,
 			);
 		};
 /* End PBXProject section */
@@ -304,20 +188,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A10000000000000000000005 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		DA7A00000000000000000005 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		DA7B00000000000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -341,20 +211,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		DA7A00000000000000000003 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		DA7B00000000000000000003 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -362,11 +218,6 @@
 			isa = PBXTargetDependency;
 			target = 8FCE25472FBE97330023FC83 /* CoolRun */;
 			targetProxy = A10000000000000000000010 /* PBXContainerItemProxy */;
-		};
-		DA7B0000000000000000000B /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = DA7B00000000000000000002 /* CoolRun Watch Complication */;
-			targetProxy = DA7B0000000000000000000A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -615,102 +466,6 @@
 			};
 			name = Release;
 		};
-		DA7A00000000000000000007 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CoolRun;
-				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKWatchOnly = YES;
-				MARKETING_VERSION = 4.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = kuao.CoolRun.watch;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Debug;
-		};
-		DA7A00000000000000000008 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CoolRun;
-				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKWatchOnly = YES;
-				MARKETING_VERSION = 4.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = kuao.CoolRun.watch;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Release;
-		};
-		DA7B00000000000000000007 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "CoolRun Watch Complication/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "金价";
-				MARKETING_VERSION = 4.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = kuao.CoolRun.watch.complication;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Debug;
-		};
-		DA7B00000000000000000008 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "CoolRun Watch Complication/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "金价";
-				MARKETING_VERSION = 4.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = kuao.CoolRun.watch.complication;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -737,24 +492,6 @@
 			buildConfigurations = (
 				A10000000000000000000008 /* Debug */,
 				A10000000000000000000009 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		DA7A00000000000000000009 /* Build configuration list for PBXNativeTarget "CoolRun Watch" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DA7A00000000000000000007 /* Debug */,
-				DA7A00000000000000000008 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		DA7B00000000000000000009 /* Build configuration list for PBXNativeTarget "CoolRun Watch Complication" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DA7B00000000000000000007 /* Debug */,
-				DA7B00000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
