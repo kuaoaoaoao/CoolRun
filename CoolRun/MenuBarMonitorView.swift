@@ -10,8 +10,8 @@ final class PopoverPinState {
 
 struct MenuBarMonitorView: View {
     @State private var viewModel: SystemMonitorViewModel
-    // 重启后回到上次使用的模块
-    @State private var viewMode: ViewMode = ViewMode(rawValue: AppSettings.shared.lastViewModeRaw) ?? .monitor
+    // 重启后回到上次使用的模块；若该模块已被隐藏则落到第一个可见模块
+    @State private var viewMode: ViewMode = AppSettings.shared.initialViewMode
     @Bindable private var pinState: PopoverPinState
     private let onPinChange: (Bool) -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -96,6 +96,12 @@ struct MenuBarMonitorView: View {
         .padding(8)
         .onChange(of: viewMode) { _, newValue in
             AppSettings.shared.lastViewModeRaw = newValue.rawValue
+        }
+        // 当前模块在设置中被隐藏时，自动切到第一个可见模块
+        .onChange(of: settings.visibleTabRaws) { _, _ in
+            if !settings.isTabVisible(viewMode) {
+                viewMode = settings.visibleViewModes.first ?? .monitor
+            }
         }
         .onReceive(router.$request.compactMap { $0 }) { request in
             viewMode = request.mode

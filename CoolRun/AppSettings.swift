@@ -217,6 +217,11 @@ class AppSettings: ObservableObject {
         didSet { userDefaults.set(lastViewModeRaw, forKey: "last_view_mode") }
     }
 
+    // 面板导航栏中可见的模块（ViewMode.rawValue 集合），默认只显示监控/金价/日历/剪切板
+    @Published var visibleTabRaws: Set<String> {
+        didSet { userDefaults.set(visibleTabRaws.sorted(), forKey: "visible_tabs") }
+    }
+
     private init() {
         // 从 UserDefaults 加载设置
         let langRaw = userDefaults.string(forKey: "app_language") ?? AppLanguage.chinese.rawValue
@@ -260,6 +265,18 @@ class AppSettings: ObservableObject {
         self.analyticsEnabled = userDefaults.object(forKey: "analytics_enabled") as? Bool ?? false
 
         self.lastViewModeRaw = userDefaults.string(forKey: "last_view_mode") ?? ""
+
+        // 首次运行（无持久化值）时采用默认可见模块；已存值则过滤掉失效 raw 后恢复，
+        // 全部失效（手改 plist、版本删减模块等）时回退默认，保证导航栏不为空
+        let validRaws = Set(ViewMode.allCases.map(\.rawValue))
+        if let savedTabs = userDefaults.stringArray(forKey: "visible_tabs"), !savedTabs.isEmpty {
+            let cleaned = Set(savedTabs).intersection(validRaws)
+            self.visibleTabRaws = cleaned.isEmpty
+                ? Set(ViewMode.defaultVisible.map(\.rawValue))
+                : cleaned
+        } else {
+            self.visibleTabRaws = Set(ViewMode.defaultVisible.map(\.rawValue))
+        }
 
         let modeRaw = userDefaults.string(forKey: "menubar_display_mode") ?? MenuBarDisplayMode.goldPrice.rawValue
         let primaryMode = MenuBarDisplayMode(rawValue: modeRaw) ?? .goldPrice
@@ -306,6 +323,35 @@ class AppSettings: ObservableObject {
         self.englishVoiceHintDismissed = userDefaults.object(forKey: "english_voice_hint_dismissed") as? Bool ?? false
         let stageRaw = userDefaults.string(forKey: "english_stage") ?? EnglishStage.daily.rawValue
         self.englishStage = EnglishStage(rawValue: stageRaw) ?? .daily
+    }
+
+    // MARK: - 面板模块显隐
+
+    /// 按 ViewMode 声明顺序返回当前可见的模块
+    var visibleViewModes: [ViewMode] {
+        ViewMode.allCases.filter { visibleTabRaws.contains($0.rawValue) }
+    }
+
+    func isTabVisible(_ mode: ViewMode) -> Bool {
+        visibleTabRaws.contains(mode.rawValue)
+    }
+
+    /// 切换模块显隐；保底至少保留一个有效可见模块，避免导航栏为空
+    func setTabVisible(_ mode: ViewMode, _ visible: Bool) {
+        if visible {
+            visibleTabRaws.insert(mode.rawValue)
+        } else {
+            guard visibleViewModes.count > 1 else { return }
+            visibleTabRaws.remove(mode.rawValue)
+        }
+    }
+
+    /// 启动时的初始模块：优先恢复上次使用且仍可见的模块，否则取第一个可见模块
+    var initialViewMode: ViewMode {
+        if let saved = ViewMode(rawValue: lastViewModeRaw), isTabVisible(saved) {
+            return saved
+        }
+        return visibleViewModes.first ?? .monitor
     }
 }
 
@@ -594,6 +640,8 @@ enum LocalizedString {
         switch key {
         case "language": return l(currentLang, en: "Language", zh: "语言", ja: "言語", ko: "언어")
         case "language_desc": return l(currentLang, en: "Select display language", zh: "选择显示语言", ja: "表示言語を選択", ko: "표시 언어 선택")
+        case "panel_tabs": return l(currentLang, en: "Panel Modules", zh: "面板模块", ja: "パネルモジュール", ko: "패널 모듈")
+        case "panel_tabs_desc": return l(currentLang, en: "Choose which tabs appear in the panel navigation", zh: "选择面板导航栏中显示哪些功能模块", ja: "パネルナビゲーションに表示するモジュールを選択", ko: "패널 내비게이션에 표시할 모듈 선택")
         case "monitor_modules": return l(currentLang, en: "Monitor Modules", zh: "监控模块", ja: "監視モジュール", ko: "모니터링 모듈")
         case "monitor_modules_desc": return l(currentLang, en: "Choose which modules to display", zh: "选择要显示的监控模块", ja: "表示するモジュールを選択", ko: "표시할 모듈 선택")
         case "menu_bar_display": return l(currentLang, en: "Menu Bar Display", zh: "菜单栏显示", ja: "メニューバー表示", ko: "메뉴 막대 표시")

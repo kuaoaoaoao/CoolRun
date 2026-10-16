@@ -221,7 +221,8 @@ final class DataMigrationManager {
             englishSpeakTranslation: s.englishSpeakTranslation,
             aiQuotaAlertEnabled: s.aiQuotaAlertEnabled,
             goldHoldingGramsText: UserDefaults.standard.string(forKey: "goldHoldingGramsText"),
-            goldHoldingAverageCostText: UserDefaults.standard.string(forKey: "goldHoldingAverageCostText")
+            goldHoldingAverageCostText: UserDefaults.standard.string(forKey: "goldHoldingAverageCostText"),
+            visibleTabs: s.visibleTabRaws.sorted()
         )
     }
 
@@ -251,6 +252,14 @@ final class DataMigrationManager {
         }
         if let averageCost = data.goldHoldingAverageCostText {
             UserDefaults.standard.set(averageCost, forKey: "goldHoldingAverageCostText")
+        }
+        // 恢复面板模块显隐；过滤失效 raw，全部无效时忽略（保留本机现状）
+        if let visibleTabs = data.visibleTabs {
+            let validRaws = Set(ViewMode.allCases.map(\.rawValue))
+            let cleaned = Set(visibleTabs).intersection(validRaws)
+            if !cleaned.isEmpty {
+                s.visibleTabRaws = cleaned
+            }
         }
     }
 
@@ -372,4 +381,6 @@ struct SettingsData: Codable {
     let aiQuotaAlertEnabled: Bool?
     let goldHoldingGramsText: String?
     let goldHoldingAverageCostText: String?
+    // v4 追加：面板模块显隐配置（可选，兼容旧档案）
+    let visibleTabs: [String]?
 }

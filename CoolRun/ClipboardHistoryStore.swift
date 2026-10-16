@@ -76,17 +76,9 @@ final class ClipboardHistoryStore {
         return entries.filter { $0.text.localizedCaseInsensitiveContains(normalized) }
     }
 
-    func copyToPasteboard(id: UUID, now: Date = Date()) {
-        guard let entry = entries.first(where: { $0.id == id }) else { return }
-        pasteboard.clearContents()
-        pasteboard.setString(entry.text, forType: .string)
-        lastChangeCount = pasteboard.changeCount
-        ingest(entry.text, at: now)
-    }
-
     /// Writes an entry to the pasteboard without promoting it to the top of
-    /// history, so quick-paste shortcuts keep a stable order.
-    func writeToPasteboard(id: UUID) {
+    /// history, so in-app copies and quick-paste shortcuts keep a stable order.
+    func copyToPasteboard(id: UUID) {
         guard let entry = entries.first(where: { $0.id == id }) else { return }
         pasteboard.clearContents()
         pasteboard.setString(entry.text, forType: .string)

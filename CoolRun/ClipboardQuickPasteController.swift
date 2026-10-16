@@ -3,6 +3,9 @@ import AppKit
 import Carbon
 import CoreGraphics
 import Observation
+import os.log
+
+private let logger = Logger(subsystem: "com.coolrun.clipboard", category: "quickPaste")
 
 /// Registers ⌃⌘1…9 global hotkeys that paste the nth clipboard-history entry.
 /// Off by default; users opt in via Settings.
@@ -102,6 +105,8 @@ final class ClipboardQuickPasteController {
                 conflictedSlots.insert(slot)
             }
         }
+        let conflictList = conflictedSlots.map(String.init).joined(separator: ",")
+        logger.info("registered \(self.hotKeyRefs.count, privacy: .public)/\(Self.slotCount, privacy: .public) hotkeys; conflicted slots: \(conflictList, privacy: .public)")
         if !isHandlerInstalled {
             var spec = EventTypeSpec(
                 eventClass: OSType(kEventClassKeyboard),
@@ -136,17 +141,25 @@ final class ClipboardQuickPasteController {
     }
 
     fileprivate static func handleHotKey(slot: Int) {
+        logger.debug("hotkey fired for slot \(slot, privacy: .public)")
         guard slot >= 0, slot < slotCount else { return }
-        guard Date().timeIntervalSince(lastPasteAt) > pasteThrottleInterval else { return }
+        guard Date().timeIntervalSince(lastPasteAt) > pasteThrottleInterval else {
+            logger.debug("hotkey slot \(slot, privacy: .public) throttled")
+            return
+        }
         lastPasteAt = Date()
         guard AXIsProcessTrusted() else {
+            logger.error("hotkey slot \(slot, privacy: .public) ignored: accessibility not granted to this running process")
             promptForAccessibilityIfNeeded()
             return
         }
         let store = ClipboardHistoryStore.shared
-        guard let entry = store.entries[safe: slot] else { return }
-        // writeToPasteboard (not copyToPasteboard) keeps the history order stable.
-        store.writeToPasteboard(id: entry.id)
+        guard let entry = store.entries[safe: slot] else {
+            logger.debug("hotkey slot \(slot, privacy: .public) ignored: no entry at index (history count \(store.entries.count, privacy: .public))")
+            return
+        }
+        store.copyToPasteboard(id: entry.id)
+        logger.debug("hotkey slot \(slot, privacy: .public) wrote entry, posting ⌘V")
         // Give the pasteboard write a moment to settle before synthesizing ⌘V.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             Self.postPasteKeystroke()
@@ -163,11 +176,15 @@ final class ClipboardQuickPasteController {
         let source = CGEventSource(stateID: .combinedSessionState)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9 /* v */, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
-        else { return }
+        else {
+            logger.error("failed to create ⌘V key events")
+            return
+        }
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cgSessionEventTap)
         keyUp.post(tap: .cgSessionEventTap)
+        logger.debug("posted ⌘V key events")
     }
 }
 

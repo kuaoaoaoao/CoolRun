@@ -628,8 +628,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
             rotationUsesSecondary: rotationUsesSecondary
         )
         let titleWidth = displayTitle.size(withAttributes: [.font: button.font ?? Self.statusTitleFont]).width
-        let imageWidth = button.image.map { $0.size.width + 4 } ?? 0
-        let measuredLength = ceil(titleWidth + imageWidth + 14)
+        let imageWidth = button.image.map { $0.size.width + 3 } ?? 0
+        let measuredLength = ceil(titleWidth + imageWidth + 10)
         let length = min(
             max(measuredLength, minimumStatusItemLength(for: mode)),
             maximumStatusItemLength(for: mode)
@@ -638,28 +638,28 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     }
 
     private func minimumStatusItemLength(for mode: MenuBarDisplayMode) -> CGFloat {
-        if settings.menuBarCompositionStyle == .pair { return 118 }
+        if settings.menuBarCompositionStyle == .pair { return 104 }
         switch mode {
-        case .goldPrice: return 76
-        case .date: return 82
-        case .cpu, .memory: return 72
-        case .network: return 116
-        case .english: return 92
-        case .codex, .claude: return 76
-        case .countdown: return 76
+        case .goldPrice: return 64
+        case .date: return 74
+        case .cpu, .memory: return 64
+        case .network: return 104
+        case .english: return 84
+        case .codex, .claude: return 68
+        case .countdown: return 68
         }
     }
 
     private func maximumStatusItemLength(for mode: MenuBarDisplayMode) -> CGFloat {
-        if settings.menuBarCompositionStyle == .pair { return 184 }
+        if settings.menuBarCompositionStyle == .pair { return 170 }
         switch mode {
-        case .goldPrice: return 132
-        case .date: return 124
-        case .cpu, .memory: return 84
-        case .network: return 136
-        case .english: return 142
-        case .codex, .claude: return 150
-        case .countdown: return 132
+        case .goldPrice: return 116
+        case .date: return 112
+        case .cpu, .memory: return 78
+        case .network: return 124
+        case .english: return 130
+        case .codex, .claude: return 138
+        case .countdown: return 120
         }
     }
 
@@ -964,7 +964,6 @@ enum CoinIconRenderer {
         let image = NSImage(size: size)
 
         image.lockFocus()
-        defer { image.unlockFocus() }
 
         let state = motionState(phase: CGFloat(phase), motion: motion)
         let palette = palette(appearance: appearance)
@@ -1038,6 +1037,9 @@ enum CoinIconRenderer {
             color: appearance == .rising ? NSColor.systemGreen : NSColor.systemYellow
         )
 
+        image.unlockFocus()
+        // 菜单栏宽度有限：绘制完成后整体缩小 25%，动画几何不变。
+        image.size = NSSize(width: size.width * 0.75, height: size.height * 0.75)
         image.isTemplate = false
         return image
     }
@@ -1199,21 +1201,10 @@ enum CoinIconRenderer {
     }
 }
 
-private extension Double {
-    var goldPriceText: String {
-        "¥" + formatted(.number.precision(.fractionLength(2))) + "/g"
-    }
-}
-
 private extension MacAppDelegate {
-    // 金价模式菜单栏文本：有官方涨跌幅时附带展示，如 "¥886.16 -0.25%"
+    // 金价模式菜单栏文本：仅显示价格，如 "¥886.2"，涨跌幅在弹窗内查看。
     static func menuBarGoldText(for quote: GoldPriceQuote) -> String {
-        guard let rate = quote.changeRatePercent else {
-            return quote.cnyPerGram.goldPriceText
-        }
-        let price = "¥" + quote.cnyPerGram.formatted(.number.precision(.fractionLength(2)))
-        let percent = rate.formatted(.number.sign(strategy: .always()).precision(.fractionLength(2))) + "%"
-        return "\(price) \(percent)"
+        "¥" + quote.cnyPerGram.formatted(.number.precision(.fractionLength(1)))
     }
 }
 #endif

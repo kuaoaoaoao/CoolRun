@@ -246,6 +246,31 @@ struct SettingsView: View {
             }
 
             SettingsCard(
+                icon: "rectangle.split.3x1",
+                title: LocalizedString.settings("panel_tabs"),
+                description: LocalizedString.settings("panel_tabs_desc")
+            ) {
+                VStack(spacing: 0) {
+                    ForEach(Array(ViewMode.allCases.enumerated()), id: \.element) { index, mode in
+                        MonitorToggleRow(
+                            icon: mode.icon,
+                            title: mode.displayName,
+                            isOn: Binding(
+                                get: { settings.isTabVisible(mode) },
+                                set: { settings.setTabVisible(mode, $0) }
+                            )
+                        )
+                        // 保底至少保留一个模块可见，最后一个是唯一可见时禁止关闭
+                        .disabled(settings.isTabVisible(mode) && settings.visibleViewModes.count <= 1)
+
+                        if index != ViewMode.allCases.count - 1 {
+                            Divider().padding(.horizontal, 14)
+                        }
+                    }
+                }
+            }
+
+            SettingsCard(
                 icon: "power",
                 title: LocalizedString.settings("startup"),
                 description: LocalizedString.settings("startup_desc")

@@ -56,12 +56,15 @@ enum ViewMode: String, CaseIterable, Sendable {
         case .diagnostics: return "8"
         }
     }
+
+    /// 默认在导航栏显示的模块，其余模块需在设置中手动开启
+    static let defaultVisible: Set<ViewMode> = [.monitor, .gold, .calendar, .clipboard]
 }
 
 struct ContentView: View {
     @State private var viewModel = SystemMonitorViewModel()
-    // 重启后回到上次使用的模块
-    @State private var viewMode: ViewMode = ViewMode(rawValue: AppSettings.shared.lastViewModeRaw) ?? .monitor
+    // 重启后回到上次使用的模块；若该模块已被隐藏则落到第一个可见模块
+    @State private var viewMode: ViewMode = AppSettings.shared.initialViewMode
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var router = AppNavigationRouter.shared
     @ObservedObject private var settings = AppSettings.shared
@@ -132,6 +135,12 @@ struct ContentView: View {
         .onChange(of: viewMode) { _, newValue in
             AppSettings.shared.lastViewModeRaw = newValue.rawValue
         }
+        // 当前模块在设置中被隐藏时，自动切到第一个可见模块
+        .onChange(of: settings.visibleTabRaws) { _, _ in
+            if !settings.isTabVisible(viewMode) {
+                viewMode = settings.visibleViewModes.first ?? .monitor
+            }
+        }
     }
 
     private var todayAttention: TodaySeverity? {
@@ -154,6 +163,7 @@ struct ModuleNavigationRail<Trailing: View>: View {
     @ViewBuilder let trailing: Trailing
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var settings = AppSettings.shared
     @Namespace private var selectionAnimation
     @State private var hoveredMode: ViewMode?
     var todayAttention: TodaySeverity?
@@ -191,7 +201,7 @@ struct ModuleNavigationRail<Trailing: View>: View {
 
     private func navigationContent(showsSelectionTitle: Bool) -> some View {
         HStack(spacing: 3) {
-            ForEach(ViewMode.allCases, id: \.self) { mode in
+            ForEach(settings.visibleViewModes, id: \.self) { mode in
                 Button {
                     guard selection != mode else { return }
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0.02)) {

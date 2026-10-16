@@ -145,8 +145,9 @@ final class PersonalToolsTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.first?.text, text)
         XCTAssertTrue(reloaded.entries.first?.isPinned == true)
 
-        reloaded.copyToPasteboard(id: entryID, now: Date(timeIntervalSince1970: 2_000))
+        reloaded.copyToPasteboard(id: entryID)
         XCTAssertEqual(context.pasteboard.string(forType: .string), text)
+        XCTAssertEqual(reloaded.entries.first?.copiedAt, Date(timeIntervalSince1970: 1_000))
     }
 
     private func makeClipboardStore(fileURL: URL? = nil) -> (
