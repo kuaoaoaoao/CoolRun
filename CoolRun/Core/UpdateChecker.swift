@@ -94,7 +94,7 @@ final class UpdateChecker {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, retryStrategy: .conservative)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw UpdateError.invalidResponse

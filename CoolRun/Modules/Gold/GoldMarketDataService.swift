@@ -148,7 +148,7 @@ final class GoldMarketDataService: Sendable {
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, retryStrategy: .goldPrice)
         guard let httpResponse = response as? HTTPURLResponse,
               200..<300 ~= httpResponse.statusCode else {
             throw GoldPriceError.invalidResponse
@@ -192,7 +192,7 @@ final class GoldMarketDataService: Sendable {
         request.httpBody = "reqData=\(encoded)".data(using: .utf8)
         request.timeoutInterval = 10
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, retryStrategy: .goldPrice)
         guard let httpResponse = response as? HTTPURLResponse,
               200..<300 ~= httpResponse.statusCode else {
             throw GoldPriceError.invalidResponse

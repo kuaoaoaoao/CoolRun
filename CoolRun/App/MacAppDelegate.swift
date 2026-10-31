@@ -734,10 +734,32 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         goldPriceTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refreshGoldPrice()
-                let refreshInterval = self?.settings.goldRefreshRate.duration ?? .seconds(60)
+                let refreshInterval = self?.adaptiveGoldRefreshInterval() ?? .seconds(60)
                 try? await Task.sleep(for: refreshInterval)
             }
         }
+    }
+
+    /// 智能轮询间隔：休市或夜间时段自动降频，减少电量消耗。
+    private func adaptiveGoldRefreshInterval() -> Duration {
+        let base = settings.goldRefreshRate.duration
+        let quote = GoldPriceStore.shared.latestQuote
+
+        // 1. 休市状态 → 直接 5 分钟（用户设置无效，因为价格不会变）
+        if quote?.isMarketClosed == true {
+            return .seconds(300)
+        }
+
+        // 2. 夜间时段（北京时间 23:00–07:00）→ 5 分钟
+        //    上海黄金交易所夜市到 02:30，但流动性极低，降频不影响体验
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let hour = calendar.component(.hour, from: Date())
+        if hour >= 23 || hour < 7 {
+            return max(base, .seconds(300))
+        }
+
+        return base
     }
 
     private func refreshGoldPrice() async {

@@ -50,7 +50,7 @@ final class GoldPriceService {
         request.httpBody = "reqData={}".data(using: .utf8)
         request.timeoutInterval = 10
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, retryStrategy: .goldPrice)
         guard let httpResponse = response as? HTTPURLResponse,
               200..<300 ~= httpResponse.statusCode else {
             throw GoldPriceError.invalidResponse
@@ -83,7 +83,7 @@ final class GoldPriceService {
 
     func fetchLegacyQuote() async throws -> GoldPriceQuote {
         let url = try makeURL()
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await session.data(from: url, retryStrategy: .goldPrice)
 
         guard let httpResponse = response as? HTTPURLResponse,
               200..<300 ~= httpResponse.statusCode else {

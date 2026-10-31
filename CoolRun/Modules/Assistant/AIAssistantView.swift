@@ -338,8 +338,25 @@ struct AIAssistantView: View {
             let context = await buildContext(for: trimmed)
             let systemPrompt = LLMService.defaultSystemPrompt + "\n\n" + context
 
-            if let response = await service.askWithContext(userQuestion: trimmed, systemContext: systemPrompt) {
-                messages.append(ChatMessage(role: .assistant, content: response))
+            // 先插入一条空 assistant 消息，流式过程中逐字填充
+            let placeholder = ChatMessage(role: .assistant, content: "")
+            messages.append(placeholder)
+            let placeholderIndex = messages.count - 1
+
+            guard let stream = await service.askWithContextStream(
+                userQuestion: trimmed,
+                systemContext: systemPrompt
+            ) else {
+                // 出错：把占位消息换成错误提示
+                messages[placeholderIndex] = ChatMessage(
+                    role: .error,
+                    content: service.lastError ?? "Unknown error"
+                )
+                return
+            }
+
+            for await chunk in stream {
+                messages[placeholderIndex].content += chunk
             }
         }
     }
@@ -402,7 +419,7 @@ private struct QuickQuestion: Identifiable {
 struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let role: MessageRole
-    let content: String
+    var content: String
     let timestamp = Date()
 
     enum MessageRole {

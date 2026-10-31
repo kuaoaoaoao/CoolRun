@@ -19,6 +19,8 @@ struct LLMMessage: Sendable {
 protocol LLMProvider: Sendable {
     var displayName: String { get }
     func complete(messages: [LLMMessage], model: String?) async throws -> String
+    /// 流式输出：逐字返回生成的内容。
+    func stream(messages: [LLMMessage], model: String?) async throws -> AsyncStream<String>
 }
 
 // MARK: - OpenAI Provider
@@ -59,7 +61,7 @@ struct OpenAIProvider: LLMProvider {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request, retryStrategy: .conservative)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -75,6 +77,61 @@ struct OpenAIProvider: LLMProvider {
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func stream(messages: [LLMMessage], model: String?) async throws -> AsyncStream<String> {
+        guard let url = URL(string: "\(baseURL)/v1/chat/completions") else {
+            throw LLMError.invalidConfiguration("Invalid base URL: \(baseURL)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 120
+
+        let bodyMessages = messages.map { msg in
+            ["role": msg.role.rawValue, "content": msg.content]
+        }
+
+        let body: [String: Any] = [
+            "model": model ?? defaultModel,
+            "messages": bodyMessages,
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "stream": true,
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            var data = Data()
+            for try await byte in bytes { data.append(byte) }
+            throw LLMError.apiError(statusCode: status, message: Self.extractErrorMessage(data))
+        }
+
+        return AsyncStream { continuation in
+            Task {
+                defer { continuation.finish() }
+                do {
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let jsonString = String(line.dropFirst(6))
+                        if jsonString == "[DONE]" { return }
+                        guard let data = jsonString.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let choices = json["choices"] as? [[String: Any]],
+                              let first = choices.first,
+                              let delta = first["delta"] as? [String: Any],
+                              let content = delta["content"] as? String else { continue }
+                        continuation.yield(content)
+                    }
+                } catch {
+                    continuation.finish()
+                }
+            }
+        }
     }
 
     static func extractErrorMessage(_ data: Data) -> String {
@@ -142,7 +199,7 @@ struct AnthropicProvider: LLMProvider {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request, retryStrategy: .conservative)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -157,6 +214,72 @@ struct AnthropicProvider: LLMProvider {
         }
 
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func stream(messages: [LLMMessage], model: String?) async throws -> AsyncStream<String> {
+        guard let url = URL(string: "\(baseURL)/v1/messages") else {
+            throw LLMError.invalidConfiguration("Invalid base URL: \(baseURL)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.timeoutInterval = 120
+
+        var systemContent: String?
+        var conversationMessages: [[String: String]] = []
+        for msg in messages {
+            if msg.role == .system {
+                systemContent = msg.content
+            } else {
+                conversationMessages.append([
+                    "role": msg.role.rawValue,
+                    "content": msg.content,
+                ])
+            }
+        }
+
+        var body: [String: Any] = [
+            "model": model ?? defaultModel,
+            "messages": conversationMessages,
+            "max_tokens": 2048,
+            "temperature": 0.7,
+            "stream": true,
+        ]
+
+        if let systemContent {
+            body["system"] = systemContent
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            var data = Data()
+            for try await byte in bytes { data.append(byte) }
+            throw LLMError.apiError(statusCode: status, message: OpenAIProvider.extractErrorMessage(data))
+        }
+
+        return AsyncStream { continuation in
+            Task {
+                defer { continuation.finish() }
+                do {
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let jsonString = String(line.dropFirst(6))
+                        guard let data = jsonString.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let delta = json["delta"] as? [String: Any],
+                              let text = delta["text"] as? String else { continue }
+                        continuation.yield(text)
+                    }
+                } catch {
+                    continuation.finish()
+                }
+            }
+        }
     }
 }
 
@@ -195,7 +318,7 @@ struct OllamaProvider: LLMProvider {
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request, retryStrategy: .conservative)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -209,6 +332,54 @@ struct OllamaProvider: LLMProvider {
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func stream(messages: [LLMMessage], model: String?) async throws -> AsyncStream<String> {
+        guard let url = URL(string: "\(baseURL)/api/chat") else {
+            throw LLMError.invalidConfiguration("Invalid base URL: \(baseURL)")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 180
+
+        let bodyMessages = messages.map { msg in
+            ["role": msg.role.rawValue, "content": msg.content]
+        }
+
+        let body: [String: Any] = [
+            "model": model ?? defaultModel,
+            "messages": bodyMessages,
+            "stream": true,
+            "options": ["temperature": 0.7],
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            var data = Data()
+            for try await byte in bytes { data.append(byte) }
+            throw LLMError.apiError(statusCode: status, message: OpenAIProvider.extractErrorMessage(data))
+        }
+
+        return AsyncStream { continuation in
+            Task {
+                defer { continuation.finish() }
+                do {
+                    for try await line in bytes.lines {
+                        guard let data = line.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let message = json["message"] as? [String: Any],
+                              let content = message["content"] as? String else { continue }
+                        continuation.yield(content)
+                    }
+                } catch {
+                    continuation.finish()
+                }
+            }
+        }
     }
 }
 
@@ -393,6 +564,41 @@ final class LLMService {
             LLMMessage(role: .user, content: userQuestion),
         ]
         return await chat(messages: messages)
+    }
+
+    /// 流式对话：逐字返回模型输出，供 UI 实时显示。
+    func askWithContextStream(userQuestion: String, systemContext: String? = nil) async -> AsyncStream<String>? {
+        guard let provider = currentProvider else {
+            lastError = LLMError.noProviderConfigured.localizedDescription
+            return nil
+        }
+
+        let messages: [LLMMessage] = [
+            LLMMessage(role: .system, content: systemContext ?? Self.defaultSystemPrompt),
+            LLMMessage(role: .user, content: userQuestion),
+        ]
+
+        isLoading = true
+        lastError = nil
+
+        do {
+            let stream = try await provider.stream(messages: messages, model: nil)
+            return AsyncStream { continuation in
+                Task {
+                    defer {
+                        isLoading = false
+                        continuation.finish()
+                    }
+                    for await chunk in stream {
+                        continuation.yield(chunk)
+                    }
+                }
+            }
+        } catch {
+            isLoading = false
+            lastError = error.localizedDescription
+            return nil
+        }
     }
 
     // MARK: - 系统提示词
