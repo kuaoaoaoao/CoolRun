@@ -134,9 +134,9 @@ struct GoldWeeklyForecastCard: View {
 
     private var directionTint: Color {
         switch snapshot?.forecast?.direction {
-        case .up: AppTheme.healthy
+        case .up: AppTheme.marketUp
         case .flat: Color(red: 0.88, green: 0.57, blue: 0.16)
-        case .down: AppTheme.critical
+        case .down: AppTheme.marketDown
         case nil: AppTheme.textSecondary(colorScheme)
         }
     }
@@ -408,17 +408,5 @@ struct GoldWeeklyForecastCard: View {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(colorScheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.035))
         }
-    }
-}
-
-// MARK: - 私有数字格式化
-
-private extension Double {
-    var twoDigitNumber: String {
-        formatted(.number.precision(.fractionLength(2)))
-    }
-
-    var signedPercentNumber: String {
-        formatted(.percent.sign(strategy: .always()).precision(.fractionLength(1)))
     }
 }

@@ -31,7 +31,7 @@ struct GoldNewsClassification: Sendable, Equatable {
 enum GoldNewsClassifier {
     // MARK: 排除词（赛车、足球、奖杯等优先于包含词）
 
-    private static let excludedSportsPhrases: [String] = [
+    private nonisolated static let excludedSportsPhrases: [String] = [
         "gold cup", "racing", "speedway", "motorsport", "nascar", "formula 1",
         "f1 grand prix", "grand prix", "race results", "rally results",
         "赛程", "赛车", "杯赛", "足球", "联赛", "夺冠", "锦标赛"
@@ -39,14 +39,14 @@ enum GoldNewsClassifier {
 
     // MARK: 黄金市场路径词
 
-    private static let goldAssetPhrases: [String] = [
+    private nonisolated static let goldAssetPhrases: [String] = [
         "黄金", "金价", "贵金属", "金条",
         "gold", "gold price", "gold market", "gold rises", "gold falls",
         "gold drops", "gold climbs", "gold jumps", "gold slides",
         "bullion", "xauusd", "xau/usd", "gold bullion"
     ]
 
-    private static let financialContextPhrases: [String] = [
+    private nonisolated static let financialContextPhrases: [String] = [
         "price", "market", "inflation", "rate", "yield", "yields",
         "fed", "federal reserve", "fomc", "central bank",
         "美元指数", "收益率", "避险", "通胀", "利率", "行情", "市场",
@@ -55,19 +55,19 @@ enum GoldNewsClassifier {
 
     // MARK: 宏观事件路径词
 
-    private static let policyEntityPhrases: [String] = [
+    private nonisolated static let policyEntityPhrases: [String] = [
         "fed", "federal reserve", "fomc", "美联储", "联邦储备", "央行",
         "欧洲央行", "日本央行", "英央行", "ecb", "boj", "central bank"
     ]
 
-    private static let policyFactPhrases: [String] = [
+    private nonisolated static let policyFactPhrases: [String] = [
         "inflation", "rate hike", "rate cut", "policy", "rates",
         "通胀", "加息", "降息", "货币政策", "利率", "鹰派", "鸽派"
     ]
 
     // MARK: 方向事实（仅这些贡献方向分，人名/机构/会场不在其中）
 
-    private static let bearishPhrases: [String] = [
+    private nonisolated static let bearishPhrases: [String] = [
         "加息", "鹰派", "美元指数上涨", "美元指数上行", "收益率上行", "收益率上升",
         "金价下跌", "黄金下跌", "金价跳水", "黄金跳水",
         "rate hike", "hawkish", "dollar index rises", "dollar index strengthens",
@@ -76,7 +76,7 @@ enum GoldNewsClassifier {
         "higher yields", "stronger dollar"
     ]
 
-    private static let bullishPhrases: [String] = [
+    private nonisolated static let bullishPhrases: [String] = [
         "降息", "鸽派", "美元指数下跌", "美元指数下行", "收益率下行", "收益率下降",
         "金价上涨", "黄金上涨", "避险需求", "金价反弹", "黄金反弹",
         "rate cut", "dovish", "dollar index falls", "dollar index weakens",
@@ -87,7 +87,7 @@ enum GoldNewsClassifier {
 
     // MARK: 地缘事实
 
-    private static let geopoliticalPhrases: [String] = [
+    private nonisolated static let geopoliticalPhrases: [String] = [
         "战争", "冲突", "地缘", "war", "conflict", "geopolitical"
     ]
 
@@ -95,21 +95,21 @@ enum GoldNewsClassifier {
 
     /// 否定词窗口至少覆盖目标短语前后各 24 个字符；
     /// 命中后该短语不计方向分。
-    private static let negationPhrases: [String] = [
+    private nonisolated static let negationPhrases: [String] = [
         "not", "no ", " unlikely", "undecided", "not decided", "rules out", "won't",
         "不会", "并未", "否认", "不考虑", "尚未决定", "未决定", "排除"
     ]
 
-    private static let negationWindow = 24
+    private nonisolated static let negationWindow = 24
 
     // MARK: 停用词（eventKey 用）
 
-    private static let eventStopWords: Set<String> = [
+    private nonisolated static let eventStopWords: Set<String> = [
         "as", "the", "a", "an", "of", "in", "on", "at", "to", "for", "and", "or",
         "称", "表示", "据悉", "称。"
     ]
 
-    private static let entityPhrases: [String] = [
+    private nonisolated static let entityPhrases: [String] = [
         "warsh", "powell", "fed", "federal reserve", "fomc", "jackson hole",
         "ecb", "boj", "yellen",
         "沃什", "鲍威尔", "美联储", "杰克逊霍尔", "耶伦"

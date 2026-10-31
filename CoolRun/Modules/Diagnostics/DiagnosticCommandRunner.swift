@@ -79,7 +79,7 @@ enum FixedCommandRunner {
         }.value
     }
 
-    private static func limitedString(_ data: Data, limit: Int, keepTail: Bool) -> String {
+    private nonisolated static func limitedString(_ data: Data, limit: Int, keepTail: Bool) -> String {
         let boundedLimit = max(limit, 1_024)
         let selected: Data
         if data.count <= boundedLimit {

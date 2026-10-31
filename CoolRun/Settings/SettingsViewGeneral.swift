@@ -1,0 +1,196 @@
+import AVFoundation
+import SwiftUI
+import UserNotifications
+
+// MARK: - 通用设置
+
+extension SettingsView {
+    var generalContent: some View {
+        VStack(spacing: 16) {
+            // 语言选择
+            SettingsCard(
+                icon: "globe",
+                title: LocalizedString.settings("language"),
+                description: LocalizedString.settings("language_desc")
+            ) {
+                VStack(spacing: 0) {
+                    ForEach(AppLanguage.allCases) { language in
+                        LanguageRow(
+                            language: language,
+                            isSelected: settings.language == language
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                settings.language = language
+                            }
+                            Analytics.capture(.languageChanged, properties: [
+                                "language": language.rawValue,
+                            ])
+                        }
+
+                        if language != AppLanguage.allCases.last {
+                            Divider().padding(.horizontal, 14)
+                        }
+                    }
+                }
+            }
+
+            SettingsCard(
+                icon: "rectangle.split.3x1",
+                title: LocalizedString.settings("panel_tabs"),
+                description: LocalizedString.settings("panel_tabs_desc")
+            ) {
+                VStack(spacing: 0) {
+                    ForEach(Array(ViewMode.allCases.enumerated()), id: \.element) { index, mode in
+                        MonitorToggleRow(
+                            icon: mode.icon,
+                            title: mode.displayName,
+                            isOn: Binding(
+                                get: { settings.isTabVisible(mode) },
+                                set: { settings.setTabVisible(mode, $0) }
+                            )
+                        )
+                        // 保底至少保留一个模块可见，最后一个是唯一可见时禁止关闭
+                        .disabled(settings.isTabVisible(mode) && settings.visibleViewModes.count <= 1)
+
+                        if index != ViewMode.allCases.count - 1 {
+                            Divider().padding(.horizontal, 14)
+                        }
+                    }
+                }
+            }
+
+            SettingsCard(
+                icon: "power",
+                title: LocalizedString.settings("startup"),
+                description: LocalizedString.settings("startup_desc")
+            ) {
+                VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
+
+                        Text(LocalizedString.settings("launch_at_login"))
+                            .font(.system(size: 13))
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { launchAtLogin.isEnabled },
+                            set: { launchAtLogin.setEnabled($0) }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+
+                    if let statusMessage = launchAtLogin.statusMessage {
+                        Divider().padding(.horizontal, 14)
+                        Text(statusMessage)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                    }
+                }
+            }
+
+            SettingsCard(
+                icon: "doc.on.clipboard.fill",
+                title: LocalizedString.settings("clipboard_quick_paste"),
+                description: LocalizedString.settings("clipboard_quick_paste_desc")
+            ) {
+                VStack(spacing: 0) {
+                    MonitorToggleRow(
+                        icon: "keyboard",
+                        title: LocalizedString.settings("quick_paste_toggle"),
+                        isOn: $quickPasteEnabled
+                    )
+                    Divider().padding(.horizontal, 14)
+                    Text(LocalizedString.settings("quick_paste_note"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                    if quickPasteEnabled {
+                        let conflicts = ClipboardQuickPasteController.shared.conflictedSlots
+                        if !conflicts.isEmpty {
+                            let combos = conflicts
+                                .sorted()
+                                .map { "⌃⌘\($0 + 1)" }
+                                .joined(separator: ", ")
+                            Divider().padding(.horizontal, 14)
+                            HStack(spacing: 10) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(AppTheme.warning)
+                                    .frame(width: 20)
+                                Text("\(LocalizedString.settings("quick_paste_conflict")) \(combos)")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AppTheme.warning)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                        }
+                    }
+
+                    if !quickPasteAccessibilityGranted {
+                        Divider().padding(.horizontal, 14)
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(AppTheme.warning)
+                                .frame(width: 20)
+                            Text(LocalizedString.settings("quick_paste_accessibility"))
+                                .font(.system(size: 12))
+                            Spacer()
+                            Button(LocalizedString.settings("quick_paste_grant")) {
+                                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                    openURL(url)
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                    }
+                }
+            }
+
+            SettingsCard(
+                icon: "hand.raised.fill",
+                title: LocalizedString.settings("privacy"),
+                description: LocalizedString.settings("privacy_desc")
+            ) {
+                VStack(spacing: 0) {
+                    MonitorToggleRow(
+                        icon: "chart.bar.xaxis",
+                        title: LocalizedString.settings("share_analytics"),
+                        isOn: $settings.analyticsEnabled
+                    )
+                    .disabled(!Analytics.isConfigured)
+                    Divider().padding(.horizontal, 14)
+                    Text(LocalizedString.settings(
+                        Analytics.isConfigured ? "privacy_note" : "analytics_unavailable"
+                    ))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Analytics.isConfigured ? Color.secondary : AppTheme.warning)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                }
+            }
+        }
+        .onAppear {
+            launchAtLogin.refresh()
+            quickPasteAccessibilityGranted = AXIsProcessTrusted()
+        }
+        // 从系统设置授权回来后刷新权限状态，否则警告行不会消失
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            quickPasteAccessibilityGranted = AXIsProcessTrusted()
+        }
+    }
+}

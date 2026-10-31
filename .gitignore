@@ -16,6 +16,11 @@ docs/images/.DS_Store
 .qoder/
 .qwen/
 .trae/
+.workbuddy/
+.workbuddy-ai/
+
+# 测试覆盖率产物（xcodebuild test 会在仓库根目录留下空文件）
+*.profraw
 
 # Agent workflow helpers
 openspec/

@@ -668,8 +668,8 @@ struct PredictionReviewView: View {
     
     private func directionColor(for direction: String) -> Color {
         switch direction {
-        case "buy": return AppTheme.healthy
-        case "sell": return AppTheme.critical
+        case "buy": return AppTheme.marketUp
+        case "sell": return AppTheme.marketDown
         default: return AppTheme.textSecondary(colorScheme)
         }
     }
@@ -699,27 +699,5 @@ private struct StatPill: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-private extension Double {
-    var goldPriceNumber: String {
-        formatted(.number.precision(.fractionLength(2)))
-    }
-
-    var twoDigitNumber: String {
-        formatted(.number.precision(.fractionLength(2)))
-    }
-
-    var percentNumber: String {
-        formatted(.percent.precision(.fractionLength(1)))
-    }
-
-    var signedPercentNumber: String {
-        formatted(.percent.sign(strategy: .always()).precision(.fractionLength(1)))
-    }
-
-    var signedShortNumber: String {
-        formatted(.number.sign(strategy: .always()).precision(.fractionLength(2)))
     }
 }

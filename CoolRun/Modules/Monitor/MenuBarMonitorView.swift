@@ -14,6 +14,8 @@ struct MenuBarMonitorView: View {
     @State private var viewMode: ViewMode = AppSettings.shared.initialViewMode
     @Bindable private var pinState: PopoverPinState
     private let onPinChange: (Bool) -> Void
+    /// 切换模块时通知宿主调整 popover 尺寸（各模块画布大小不同）。
+    private let onViewModeChange: ((ViewMode) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var router = AppNavigationRouter.shared
@@ -27,11 +29,13 @@ struct MenuBarMonitorView: View {
     init(
         viewModel: SystemMonitorViewModel,
         pinState: PopoverPinState,
-        onPinChange: @escaping (Bool) -> Void
+        onPinChange: @escaping (Bool) -> Void,
+        onViewModeChange: ((ViewMode) -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         _pinState = Bindable(wrappedValue: pinState)
         self.onPinChange = onPinChange
+        self.onViewModeChange = onViewModeChange
     }
 
     var body: some View {
@@ -86,16 +90,27 @@ struct MenuBarMonitorView: View {
                     ClipboardHistoryView()
                 case .diagnostics:
                     DiagnosticsView()
+                case .aiAssistant:
+                    AIAssistantView()
                 }
             }
             .id(viewMode)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .transition(.opacity.combined(with: .scale(scale: 0.985)))
         }
-        .frame(width: 320, height: 512, alignment: .top)
-        .padding(8)
+        .frame(
+            width: viewMode.panelContentSize.width,
+            height: viewMode.panelContentSize.height,
+            alignment: .top
+        )
+        .padding(ViewMode.panelOuterInset)
         .onChange(of: viewMode) { _, newValue in
             AppSettings.shared.lastViewModeRaw = newValue.rawValue
+            onViewModeChange?(newValue)
+        }
+        .onAppear {
+            // 首次展示时把真实画布尺寸同步给 popover，避免固定值与模块不匹配
+            onViewModeChange?(viewMode)
         }
         // 当前模块在设置中被隐藏时，自动切到第一个可见模块
         .onChange(of: settings.visibleTabRaws) { _, _ in

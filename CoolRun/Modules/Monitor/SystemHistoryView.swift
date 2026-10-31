@@ -6,20 +6,23 @@ struct SystemHistoryCard: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var router = AppNavigationRouter.shared
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isExpanded = false
+    private let disclosure = MonitorSectionDisclosure.shared
+
+    private var isExpanded: Bool { disclosure.isExpanded(.history) }
 
     private var recent: [SystemHistorySample] { store.recentSamples(hours: 24) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 7) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.18)) { disclosure.toggle(.history) }
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                     Text(LocalizedString.l(settings.language, en: "Recent system history", zh: "最近系统记录", ja: "最近のシステム履歴", ko: "최근 시스템 기록"))
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 11, weight: .semibold))
                     Spacer()
                     if !store.anomalies.isEmpty {
                         Text("\(store.anomalies.count)")
@@ -29,10 +32,13 @@ struct SystemHistoryCard: View {
                             .padding(.vertical, 2)
                             .background(AppTheme.warning.opacity(0.12), in: Capsule())
                     }
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
+                .frame(minHeight: 24)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -61,7 +67,8 @@ struct SystemHistoryCard: View {
                 }
             }
         }
-        .padding(10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(AppTheme.elevatedSurface(colorScheme))
@@ -72,7 +79,9 @@ struct SystemHistoryCard: View {
         }
         .onReceive(router.$request.compactMap { $0 }) { request in
             guard request.quickAction == .showSystemHistory else { return }
-            isExpanded = true
+            withAnimation(.easeInOut(duration: 0.18)) {
+                disclosure.setExpanded(true, for: .history)
+            }
             router.consumeQuickAction(request.id)
         }
     }

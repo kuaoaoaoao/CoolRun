@@ -267,15 +267,27 @@ class AppSettings: ObservableObject {
         self.lastViewModeRaw = userDefaults.string(forKey: "last_view_mode") ?? ""
 
         // 首次运行（无持久化值）时采用默认可见模块；已存值则过滤掉失效 raw 后恢复，
-        // 全部失效（手改 plist、版本删减模块等）时回退默认，保证导航栏不为空
+        // 全部失效（手改 plist、版本删减模块等）时回退默认，保证导航栏不为空。
+        // 另外做一次结构版本迁移：把老版本之后新增的模块并入已保存的集合，
+        // 否则升级上来的用户永远看不到新模块。
         let validRaws = Set(ViewMode.allCases.map(\.rawValue))
+        let storedSchema = userDefaults.object(forKey: "visible_tabs_schema") as? Int ?? 1
+        let resolvedTabs: Set<String>
         if let savedTabs = userDefaults.stringArray(forKey: "visible_tabs"), !savedTabs.isEmpty {
-            let cleaned = Set(savedTabs).intersection(validRaws)
-            self.visibleTabRaws = cleaned.isEmpty
+            var cleaned = Set(savedTabs).intersection(validRaws)
+            if storedSchema < ViewMode.visibleTabsSchemaVersion {
+                cleaned.formUnion(ViewMode.modulesAdded(after: storedSchema).map(\.rawValue))
+            }
+            resolvedTabs = cleaned.isEmpty
                 ? Set(ViewMode.defaultVisible.map(\.rawValue))
                 : cleaned
         } else {
-            self.visibleTabRaws = Set(ViewMode.defaultVisible.map(\.rawValue))
+            resolvedTabs = Set(ViewMode.defaultVisible.map(\.rawValue))
+        }
+        self.visibleTabRaws = resolvedTabs
+        if storedSchema < ViewMode.visibleTabsSchemaVersion {
+            userDefaults.set(resolvedTabs.sorted(), forKey: "visible_tabs")
+            userDefaults.set(ViewMode.visibleTabsSchemaVersion, forKey: "visible_tabs_schema")
         }
 
         let modeRaw = userDefaults.string(forKey: "menubar_display_mode") ?? MenuBarDisplayMode.goldPrice.rawValue
@@ -754,6 +766,8 @@ enum LocalizedString {
         case "thermal_hot": return l(currentLang, en: "Running hot", zh: "温度过高", ja: "高温", ko: "온도 높음")
         case "expand_hint": return l(currentLang, en: "Show details", zh: "展开详情", ja: "詳細を表示", ko: "세부 정보 보기")
         case "collapse_hint": return l(currentLang, en: "Hide details", zh: "收起详情", ja: "詳細を閉じる", ko: "세부 정보 닫기")
+        case "expand_all": return l(currentLang, en: "Expand all sections", zh: "一键展开全部", ja: "すべて展開", ko: "모두 펼치기")
+        case "collapse_all": return l(currentLang, en: "Collapse all sections", zh: "一键收起全部", ja: "すべて折りたたむ", ko: "모두 접기")
         case "no_modules": return l(currentLang, en: "No monitor modules", zh: "未启用监控模块", ja: "監視モジュールなし", ko: "모니터링 모듈 없음")
         case "no_modules_hint": return l(currentLang, en: "Enable modules in Settings", zh: "请在设置中启用需要的模块", ja: "設定でモジュールを有効にしてください", ko: "설정에서 모듈을 활성화하세요")
         case "core_count": return l(currentLang, en: "Cores", zh: "核心数", ja: "コア数", ko: "코어 수")

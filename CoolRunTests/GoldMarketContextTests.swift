@@ -30,15 +30,17 @@ final class GoldMarketContextTests: XCTestCase {
     // MARK: - 场景一：RSS 过滤、聚类与来源参与
 
     func testFetchContextFiltersIrrelevantAndSyndicatedNews() async throws {
+        // 夹具时间必须相对当前时刻生成：服务只保留最近 4 天的新闻，
+        // 写死 pubDate 的夹具会随真实日期推移全部过期（时间炸弹）。
+        let now = Date()
         GoldContextURLProtocolStub.rssHandler = { _ in
-            Self.makeRSSFeed()
+            Self.makeRSSFeed(relativeTo: now)
         }
         GoldContextURLProtocolStub.treasuryHandler = { _ in
             throw URLError(.notConnectedToInternet)
         }
 
         let service = makeService()
-        let now = Date()
         let context = try await service.fetchContext(
             now: now.addingTimeInterval(60),
             language: .chinese
@@ -77,14 +79,23 @@ final class GoldMarketContextTests: XCTestCase {
 
     // MARK: - 固定 RSS 数据
 
-    private static func makeRSSFeed() -> String {
+    /// 生成 RSS 夹具，`pubDate` 以 `reference` 为基准往前推，保证永远落在服务的时效窗口内。
+    private static func makeRSSFeed(relativeTo reference: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        func pubDate(minutesAgo: Int) -> String {
+            formatter.string(from: reference.addingTimeInterval(-Double(minutesAgo) * 60))
+        }
+
         let items = [
             // Reuters 黄金/美联储新闻（保留）
             """
             <item>
                 <title>Warsh signals inflation concern; gold market watches Fed - Reuters</title>
                 <link>https://example.com/1</link>
-                <pubDate>Sat, 29 Aug 2026 03:00:00 GMT</pubDate>
+                <pubDate>\(pubDate(minutesAgo: 30))</pubDate>
                 <source url="https://reuters.com">Reuters</source>
             </item>
             """,
@@ -93,7 +104,7 @@ final class GoldMarketContextTests: XCTestCase {
             <item>
                 <title>美芯片股大跌黄金跳水 美联储主席沃什鹰派发声 - 证券时报</title>
                 <link>https://example.com/2</link>
-                <pubDate>Sat, 29 Aug 2026 03:30:00 GMT</pubDate>
+                <pubDate>\(pubDate(minutesAgo: 25))</pubDate>
                 <source url="https://stcn.com">证券时报</source>
             </item>
             """,
@@ -102,7 +113,7 @@ final class GoldMarketContextTests: XCTestCase {
             <item>
                 <title>2026 High Limit Racing Gold Cup results at Silver Dollar Speedway - FloRacing</title>
                 <link>https://example.com/3</link>
-                <pubDate>Sat, 29 Aug 2026 04:00:00 GMT</pubDate>
+                <pubDate>\(pubDate(minutesAgo: 20))</pubDate>
                 <source url="https://floracing.com">FloRacing</source>
             </item>
             """,
@@ -111,7 +122,7 @@ final class GoldMarketContextTests: XCTestCase {
             <item>
                 <title>Warsh signals inflation concern as gold market watches Fed | Yahoo Finance</title>
                 <link>https://example.com/4</link>
-                <pubDate>Sat, 29 Aug 2026 04:30:00 GMT</pubDate>
+                <pubDate>\(pubDate(minutesAgo: 15))</pubDate>
                 <source url="https://finance.yahoo.com">Yahoo Finance</source>
             </item>
             """

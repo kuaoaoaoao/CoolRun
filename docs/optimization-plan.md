@@ -81,3 +81,53 @@
 - 2026-07-14：Swift 语法解析与工程结构校验通过；完整构建因 PostHog 依赖解析受网络沙箱限制，待授权后继续。
 - 2026-07-19：整理本文件为长期接力文档，补充当前状态、下一批验证项和后续功能路线。
 - 2026-08-01：完成四项 Mac 诊断、隐私边界、聚焦测试与全量测试；明确输出设备切换和工作区恢复为第 5、6 项。
+- **2026-10-30**：代码审核与优化执行：
+  - [x] 拆分 `GoldAnalysisView.swift`（3,432 行 → 3 个文件：主视图 ~750 行、ViewModel ~430 行、卡片 ~2,200 行）
+  - [x] 新增 LLM 助手模块（`LLMService.swift` + `AIAssistantView.swift`），支持 OpenAI/Anthropic/Ollama 多 Provider
+  - [x] 新增 `ViewMode.aiAssistant`，集成到导航栏和 ContentView
+  - [x] 更新 `CLAUDE.md` 反映 10 模块实际架构
+  - [x] 拆分 `SettingsView.swift`（2,109 行 → 9 个文件，主文件降至 163 行）：
+    - `SettingsView.swift`（163）主壳层：侧边栏 + 页头 + 分类分发
+    - `SettingsCategory.swift`（63）分类枚举
+    - `SettingsViewGeneral.swift`（196）/ `SettingsViewMonitors.swift`（151）/ `SettingsViewReminders.swift`（164）/ `SettingsViewMenuBar.swift`（331）/ `SettingsViewEnglish.swift`（276）/ `SettingsViewData.swift`（66）各分类页内容
+    - `SettingsComponents.swift`（735）共享卡片与行组件
+  - [x] 拆分后全量 `swiftc -parse` 通过；跨文件引用改为 internal，组件可见性校验通过
+  - [x] 拆分 `ContentView.swift`（1,907 行 → 5 个文件）：
+    - `ContentView.swift`（294）导航壳层：`ViewMode` + `ContentView` + `ModuleNavigationRail`
+    - `AppTheme.swift`（104）主题色板 + `AppCardSurface` + `appCardSurface()`
+    - `MonitorPanel.swift`（214）展开状态 + `MonitorPanel`
+    - `MonitorSections.swift`（451）可折叠 Section、状态头、资源与温度卡片
+    - `ProcessAndDeviceSections.swift`（606）进程明细、存储、电池、网络、运行时长
+    - `MonitorComponents.swift`（262）`MetricRow`、`Separator`、迷你图表、进度条、毛玻璃、数字格式化
+  - [x] 静态校验：顶层类型无重名、无跨文件引用 `private` 类型、扩展成员无冲突
+  - 剩余较大文件（非阻塞）：`GoldAnalysisCards.swift` 2,290 / `AppSettings.swift` 1,347 / `MacAppDelegate.swift` 1,210
+  - [x] **目录分组**：116 个 Swift 文件从平铺结构迁到 `App/`、`Core/`、`Settings/`、`Modules/{Today,Monitor,Gold,Calendar,English,AIQuota,Assistant,Notes,Clipboard,Diagnostics,Shelf}`；JSON 词库、`Info.plist`、`Assets.xcassets`、entitlements 保留在根目录以免改变 bundle 路径（`Bundle.main.url(forResource:withExtension:)` 不带 subdirectory）
+  - [x] **面板尺寸自适应**：`ViewMode.panelContentSize` / `panelSize` 统一尺寸来源，`MacAppDelegate` 在模块切换时调整 `popover.contentSize`。监控 320×512，黄金 384×616，诊断 376×596，其余 340~356 宽
+  - [x] **修复编译错误**：`MenuBarMonitorView` 的 `switch viewMode` 缺少 `.aiAssistant` 分支（新增模块时漏改），会导致 `switch must be exhaustive`。已补上
+  - [x] 新增 `scripts/verify.sh`：无 `xcodebuild` 环境下的三项静态自检（语法解析 / 类型可见性 / 枚举 switch 完备性）
+
+- **2026-10-31**：接入真实 Xcode 后的编译验证与收尾：
+  - [x] 确认本机已装 Xcode 26.6，`xcode-select` 仍指向 CommandLineTools；改用 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` 直接调用 `xcodebuild`，无需 `sudo xcode-select -s`
+  - [x] **Debug 全量 clean build 通过**，0 error；初次统计出 36 条警告
+  - [x] **Release 构建通过**，产物 `CoolRun.app`（27 MB），同样 0 error / 0 warning
+  - [x] 单元测试 **260 通过 / 0 失败**
+  - [x] 修复既有红测试 `GoldMarketContextTests.testFetchContextFiltersIrrelevantAndSyndicatedNews`：夹具 `pubDate` 硬编码为 `Sat, 29 Aug 2026`，而 `GoldMarketContext.swift:224` 只保留最近 4 天新闻，导致用例随真实日期推移必然失败（时间炸弹）。改为以 `Date()` 为基准生成 `pubDate`
+  - [x] 已确认该测试失败在 HEAD 上同样存在（用 `git worktree` 拉 HEAD 复现），与本次重构无关
+  - [x] **并发警告清零**（36 → 0），全部是 `-default-isolation MainActor` 下纯常量/纯函数被推断为主线程隔离：
+    - `GoldNewsClassifier` 12 个词表常量、`GoldEventImpactAnalyzer` 3 个阈值 → `nonisolated static let`
+    - `AppResidueService` 的 6 个纯函数 + `minimumAge` → `nonisolated`
+    - `GoldDataStorage` 全部路径辅助函数 → `nonisolated`
+    - `FixedCommandRunner.limitedString` → `nonisolated`（此前从 `Task.detached` 调用被当作隐式 async）
+    - `GoldAnalysisViewModel.init` 的三个默认参数改为可选、在 init 内部兜底
+  - [x] 运行时冒烟测试：Debug 产物独立启动，稳定运行 20 秒无崩溃、无 stderr 输出
+  - [x] `scripts/verify.sh` 升级：有 Xcode 时执行真实 `xcodebuild build` 并统计 error/warning，无 Xcode 时降级为 `swiftc -parse`；新增 `--test` 跑单测
+
+- **2026-10-31（续）**：授权屏幕录制 + 辅助功能后做真实 UI 实测：
+  - [x] **修复「升级用户看不到新模块」**：`visible_tabs` 已持久化在老用户机器上，`defaultVisible` 改动对老用户无效。
+    引入 `ViewMode.visibleTabsSchemaVersion` + `modulesAdded(after:)`，升级时把新模块并入已保存集合并写回。
+    以后新增模块必须 +1 版本号并登记，已写入 `CLAUDE.md`
+  - [x] 实测面板按模块自适应尺寸生效：监控 362×554 → AI 398×602 → 黄金 426×658
+  - [x] 实测 AI 助手：空状态、隐私说明、三张服务商卡片渲染正常；配置表单 420×420 字段齐全
+  - [x] 实测黄金模块：拆分三个文件后渲染无异常
+  - [ ] 待决策：涨跌配色为欧美惯例（涨绿跌红），中文应用通常期望涨红跌绿
+  - [ ] 待决策：面板底部约 100pt 空白，需内容自适应高度（跨 10 模块改动）

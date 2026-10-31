@@ -6,7 +6,7 @@ struct AppResidueRoot: Equatable, Sendable {
 }
 
 enum AppResidueService {
-    static let minimumAge: TimeInterval = 30 * 24 * 60 * 60
+    nonisolated static let minimumAge: TimeInterval = 30 * 24 * 60 * 60
 
     static func scan(now: Date = Date()) async -> AppResidueScanResult {
         await Task.detached(priority: .utility) {
@@ -136,7 +136,7 @@ enum AppResidueService {
         }.value
     }
 
-    static func approvedRoots(home: URL) -> [AppResidueRoot] {
+    nonisolated static func approvedRoots(home: URL) -> [AppResidueRoot] {
         let library = home.appendingPathComponent("Library", isDirectory: true)
         return [
             AppResidueRoot(category: .caches, url: library.appendingPathComponent("Caches", isDirectory: true)),
@@ -149,7 +149,7 @@ enum AppResidueService {
         ]
     }
 
-    static func inferredIdentifier(from entryName: String) -> String? {
+    nonisolated static func inferredIdentifier(from entryName: String) -> String? {
         var candidate = entryName
         let knownSuffixes = [".plist", ".savedState", ".binarycookies"]
         if let suffix = knownSuffixes.first(where: { candidate.lowercased().hasSuffix($0.lowercased()) }) {
@@ -163,7 +163,7 @@ enum AppResidueService {
         return candidate
     }
 
-    static func isIdentifierEligible(
+    nonisolated static func isIdentifierEligible(
         _ identifier: String,
         installedIdentifiers: Set<String>
     ) -> Bool {
@@ -182,12 +182,12 @@ enum AppResidueService {
         return true
     }
 
-    static func isDirectChild(_ url: URL, ofAny roots: [URL]) -> Bool {
+    nonisolated static func isDirectChild(_ url: URL, ofAny roots: [URL]) -> Bool {
         let candidate = url.standardizedFileURL
         return roots.contains { candidate.deletingLastPathComponent() == $0.standardizedFileURL }
     }
 
-    static func installedApplicationIdentifiers(
+    nonisolated static func installedApplicationIdentifiers(
         home: URL,
         fileManager: FileManager = .default
     ) -> Set<String> {
@@ -217,7 +217,7 @@ enum AppResidueService {
         return identifiers
     }
 
-    private static func allocatedSize(
+    private nonisolated static func allocatedSize(
         of url: URL,
         values: URLResourceValues,
         fileManager: FileManager

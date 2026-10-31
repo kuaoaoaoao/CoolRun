@@ -201,7 +201,7 @@ struct GoldTradeLedgerCard: View {
                         Text(String(format: "%@¥%.0f", profit >= 0 ? "+" : "-", abs(profit)))
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .monospacedDigit()
-                            .foregroundStyle(profit >= 0 ? Color(nsColor: .systemGreen) : Color(nsColor: .systemRed))
+                            .foregroundStyle(AppTheme.marketColor(for: profit))
                     }
                 }
 
@@ -482,9 +482,8 @@ private struct ProfitCurveChart: View {
                 }
             }
 
-            let tint = (profits.last ?? 0) >= 0
-                ? Color(nsColor: .systemGreen)
-                : Color(nsColor: .systemRed)
+            // 中国市场惯例：盈利红、亏损绿。
+            let tint = AppTheme.marketColor(for: profits.last ?? 0)
 
             var fillPath = path
             fillPath.addLine(to: CGPoint(x: size.width, y: zeroY))

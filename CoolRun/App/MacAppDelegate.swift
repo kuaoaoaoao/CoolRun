@@ -57,13 +57,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
-        popover.contentSize = NSSize(width: 336, height: 528)
+        popover.contentSize = AppSettings.shared.initialViewMode.panelSize
         popover.contentViewController = NSHostingController(
             rootView: MenuBarMonitorView(
                 viewModel: viewModel,
                 pinState: popoverPinState,
                 onPinChange: { [weak self] pinned in
                     self?.setPopoverPinned(pinned)
+                },
+                onViewModeChange: { [weak self] mode in
+                    self?.resizePopover(for: mode)
                 }
             )
         )
@@ -320,6 +323,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     private func setPopoverPinned(_ pinned: Bool) {
         popoverPinState.isPinned = pinned
         popover.behavior = pinned ? .applicationDefined : .transient
+    }
+
+    /// 按模块调整面板尺寸。各模块画布不同（黄金/诊断需要更大空间），
+    /// 这里统一从 `ViewMode.panelSize` 取，避免视图与 popover 尺寸脱节。
+    private func resizePopover(for mode: ViewMode) {
+        let size = mode.panelSize
+        guard popover.contentSize != size else { return }
+        popover.contentSize = size
     }
 
     private func showContextMenu() {

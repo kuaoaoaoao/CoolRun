@@ -13,8 +13,8 @@ struct GoldWeeklyForecastReviewView: View {
 
     private var tint: Color {
         switch store.records.last?.forecast.direction {
-        case .up: AppTheme.healthy
-        case .down: AppTheme.critical
+        case .up: AppTheme.marketUp
+        case .down: AppTheme.marketDown
         default: AppTheme.gold
         }
     }
@@ -238,9 +238,9 @@ struct GoldWeeklyForecastReviewView: View {
 
     private static func directionColor(_ direction: GoldWeeklyForecastDirection) -> Color {
         switch direction {
-        case .up: AppTheme.healthy
+        case .up: AppTheme.marketUp
         case .flat: Color(red: 0.88, green: 0.57, blue: 0.16)
-        case .down: AppTheme.critical
+        case .down: AppTheme.marketDown
         }
     }
 
@@ -301,19 +301,5 @@ private struct WeeklyStatPill: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-private extension Double {
-    var twoDigitNumber: String {
-        formatted(.number.precision(.fractionLength(2)))
-    }
-
-    var percentNumber: String {
-        formatted(.percent.precision(.fractionLength(1)))
-    }
-
-    var signedPercentNumber: String {
-        formatted(.percent.sign(strategy: .always()).precision(.fractionLength(1)))
     }
 }

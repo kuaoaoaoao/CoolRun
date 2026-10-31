@@ -4,13 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CoolRun is a macOS menu bar utility that displays system monitoring metrics (CPU, memory, storage, battery, network) and real-time gold prices from 浙商银行积存金 API. It runs as a menu bar-only app (no Dock icon by default).
+CoolRun is a macOS menu bar utility that consolidates multiple everyday productivity tools into a single lightweight popover panel. It runs as a menu bar-only app (no Dock icon by default).
+
+**Current modules (10):**
+- **Today** — Prioritized overview aggregating urgency from all modules
+- **System Monitor** — CPU, memory, storage, battery, network, temperature, uptime, process ranking
+- **Gold Price** — Real-time Chinese gold price (CZB accumulation gold), technical indicators, trading signals, portfolio P&L
+- **Calendar** — Calendar with lunar calendar, Chinese holidays, birthdays, countdowns
+- **English Learning** — Graded vocabulary with TTS, progress tracking
+- **AI Quota** — Codex and Claude Code usage limits monitoring
+- **AI Assistant** — LLM-powered conversational assistant for system/gold/AI queries (NEW)
+- **Notes** — Local grouped notes with search and pinning
+- **Clipboard** — Local clipboard history with search and quick-paste
+- **Diagnostics** — Sleep/power analysis, network diagnostics, storage inspection
 
 ## Build & Run
 
-Open `CoolRun.xcodeproj` in Xcode, select the `CoolRun` scheme with target `My Mac`, and click Run. The project includes a `CoolRunTests` unit-test target; there is currently no linter configuration.
+Open `CoolRun.xcodeproj` in Xcode, select the `CoolRun` scheme with target `My Mac`, and click Run. The project includes a `CoolRunTests` unit-test target.
 
-To build from command line (if needed):
+To build from command line:
 ```bash
 xcodebuild -project CoolRun.xcodeproj -scheme CoolRun -configuration Debug build
 ```
@@ -20,64 +32,152 @@ To run unit tests:
 xcodebuild -project CoolRun.xcodeproj -scheme CoolRun -destination 'platform=macOS' test
 ```
 
-To create a DMG for distribution:
-```bash
-./scripts/create-dmg.sh /path/to/CoolRun.app
-```
-
 ## Architecture
 
 The app uses SwiftUI with an `NSApplicationDelegateAdaptor` pattern to bridge AppKit's `NSStatusItem` menu bar integration with SwiftUI views.
 
 **Data flow:**
-- `SystemSampler` (low-level Darwin/IOKit calls) → `SystemMonitorViewModel` (1-second refresh timer, `@Observable`) → SwiftUI views
-- `GoldPriceService` (async HTTP) → `MacAppDelegate` → menu bar title
+- `SystemSampler` (Darwin/IOKit) → `SystemMonitorViewModel` (@Observable) → SwiftUI views
+- `GoldPriceService` (async HTTP) → `GoldPriceStore` → `GoldAnalysisViewModel` → SwiftUI views
+- `LLMService` (LLMProvider protocol) → `AIAssistantView` → SwiftUI views
 
 **Key components:**
 
-- `CoolRunApp.swift` — Entry point. Registers `MacAppDelegate` on macOS; provides `Settings` scene (not a window group).
-- `MacAppDelegate.swift` — Core orchestrator. Manages `NSStatusItem`, popover panels, coin icon animation (CPU-driven rotation speed), gold price polling (default 1s interval via `goldPriceRefreshInterval`), and Dock icon visibility toggling. Contains `CoinIconRenderer` (programmatic NSImage drawing) and `StatusContextMenuView`.
-- `SystemSampler.swift` — Raw system data collection using Mach kernel APIs (`host_statistics`, `host_statistics64`), IOKit (`IOPSCopyPowerSourcesInfo`), and POSIX (`getifaddrs`). Tracks CPU tick deltas across calls.
-- `SystemMonitorViewModel.swift` — `@Observable` + `@MainActor` wrapper. Holds a `SystemSnapshot` and drives a 1-second refresh loop via `Task.sleep`.
-- `SystemMetrics.swift` — Pure value types: `SystemSnapshot`, `CPUMetrics`, `MemoryMetrics`, `StorageMetrics`, `BatteryMetrics`, `NetworkMetrics`.
-- `ContentView.swift` — Full monitoring panel UI (`MonitorPanel` and section views). Also defines `AppTheme` colors and byte-count formatting extensions.
-- `MenuBarMonitorView.swift` — Thin wrapper around `MonitorPanel` for the popover context.
-- `GoldPriceService.swift` — Fetches gold price from `api.jdjygold.com`, decodes nested JSON (`ZSBankGoldPriceResponse`). Returns `GoldPriceQuote`.
-- `SettingsView.swift` — Tab-based settings (About + Update). Contains `AppLinks` enum with GitHub URLs.
-- `AppVersion.swift` — Reads `CFBundleShortVersionString` / `CFBundleVersion` from the bundle.
+- `App/CoolRunApp.swift` — Entry point. Registers `MacAppDelegate` on macOS.
+- `App/MacAppDelegate.swift` — Core orchestrator. Manages `NSStatusItem`, popover panels (size per module), coin icon animation, gold price polling.
+- `App/ContentView.swift` — Module navigation rail + content area. Defines `ViewMode` enum (10 modules) and each module's panel size.
+- `Core/AppTheme.swift` — Shared theme colors + `appCardSurface()` modifier.
+- `Modules/Monitor/` — `MonitorPanel` / `MonitorSections` / `ProcessAndDeviceSections` / `MonitorComponents`.
+- `Modules/Monitor/SystemSampler.swift` — Raw system data collection using Mach kernel APIs.
+- `Modules/Monitor/SystemMonitorViewModel.swift` — @Observable + @MainActor wrapper.
+- `Modules/Gold/` — `GoldAnalysisView` / `GoldAnalysisViewModel` / `GoldAnalysisCards` plus engines and stores.
+- `Modules/Assistant/LLMService.swift` — LLM provider protocol + OpenAI/Anthropic/Ollama implementations.
+- `Modules/Assistant/LLMKeychain.swift` — `LLMProviderKind` enum + Keychain read/write for API keys.
+- `Modules/Assistant/LLMProviderSettingsView.swift` — Reusable provider config form + `LLMConfigSheet`.
+- `Modules/Assistant/AIAssistantView.swift` — Chat UI for AI assistant module.
+- `Settings/SettingsView.swift` — Settings window shell (sidebar + header + category switch).
+- `App/AppSettings.swift` — Comprehensive settings with UserDefaults persistence.
 
 ## Key Technical Details
 
-- The app uses `NSApp.setActivationPolicy(.accessory)` to hide the Dock icon, toggling to `.regular` only when the Settings window is open.
-- The gold coin icon in the menu bar is rendered programmatically via `CoinIconRenderer` (no image assets) — rotation phase is driven by CPU usage.
-- System sampling uses low-level C APIs (Darwin, IOKit, not SystemConfiguration) — `SystemSampler` is the only file that touches these.
-- Battery state has cross-platform support (`#if os(macOS)` / `#elseif canImport(UIKit)`) though the app is currently macOS-only.
-- App Sandbox is enabled with `com.apple.security.network.client` entitlement for the gold price API call.
-- Deployment target is macOS 15.0. Swift Language Version setting is 5.0 (uses Swift 5.9+ `@Observable` macro via the Observation framework).
-- Sparkle auto-update was removed; updates are manual via GitHub Releases. See `SPARKLE_SETUP.md` if re-enabling.
+- Deployment target: macOS 15.0. Swift Language Version: 5.0 (uses Swift 5.9+ `@Observable` macro).
+- App Sandbox enabled with `com.apple.security.network.client` entitlement.
+- No external package dependencies (PostHog is optional, env-configured).
+- All user data stored locally (UserDefaults, Application Support JSON files). iCloud KVS sync is optional.
+- Privacy-first: PostHog analytics has multiple layers of sanitization, default off.
+- 4 languages supported: Chinese, English, Japanese, Korean.
 
-## Features
+## File Organization
 
-### System Monitoring
-- **CPU**: Core count, real-time usage, dynamic usage bar with health color coding
-- **Memory**: Used memory, total memory, memory pressure
-- **Storage**: Used space, available space, usage progress
-- **Battery**: Level, charging status, low power mode
-- **Network**: Connection status, local IP, active interface count, upload/download speed
-- **Uptime**: System uptime display (days, hours, minutes)
-- **Temperature**: CPU and GPU temperature via SMC sensors
+Sources live under `CoolRun/` in a directory tree. The target uses a
+`PBXFileSystemSynchronizedRootGroup`, so **adding or moving files needs no
+`project.pbxproj` edit** — Xcode picks up subdirectories automatically.
 
-### UI Features
-- **Frosted Glass Effect**: Modern translucent background using `NSVisualEffectView` with `.hudWindow` material
-- **Collapsible Sections**: Click any section to expand/collapse detailed content, default is collapsed
-- **Trend Charts**: Sparkline charts showing CPU, memory, and network speed history (last 60 samples)
-- **Health Color Coding**: CPU and memory usage indicators change color based on load (green < 60%, orange 60-85%, red > 85%)
-- **Click to Copy**: Click any metric row to copy its value to clipboard with visual feedback
-- **Compact Design**: Smaller icons (14pt), tighter spacing, more information density
+```
+CoolRun/
+├── App/                 entry point, lifecycle, navigation, global state
+├── Core/                shared infrastructure (theme, analytics, sync, reminders)
+├── Settings/            settings window + one file per page
+├── Modules/
+│   ├── Today/           Today overview
+│   ├── Monitor/         system sampling + monitor panel
+│   ├── Gold/            gold price, analysis, forecasting, trade ledger
+│   ├── Calendar/        calendar, birthdays, countdowns
+│   ├── English/         learning, textbooks, vocabulary
+│   ├── AIQuota/         Codex / Claude quota monitors
+│   ├── Assistant/       LLM chat + provider configuration
+│   ├── Notes/           notes store + view
+│   ├── Clipboard/       clipboard history + quick paste
+│   ├── Diagnostics/     diagnostics reports and probes
+│   └── Shelf/           menu bar shelf
+└── *.json, Info.plist, Assets.xcassets, CoolRun.entitlements   ← stay at root
+```
+
+Resources deliberately stay at the folder root: `EnglishVocabulary*.json` is
+loaded with `Bundle.main.url(forResource:withExtension:)` (no subdirectory),
+so moving them would change their bundle paths.
+
+**Splitting convention:** one file per concern, named `<Feature><Concern>.swift`.
+When a type becomes cross-file, drop `private` and rely on module-internal
+visibility — that is why `SettingsView`'s stored properties and the monitor
+section views are `internal`.
+
+**Where the big files went:**
+
+- `GoldAnalysisView.swift` (3,432 lines) → `GoldAnalysisView` / `GoldAnalysisViewModel` / `GoldAnalysisCards`
+- `SettingsView.swift` (2,109 lines) → shell + `SettingsCategory` + 7 page files + `SettingsComponents`
+- `ContentView.swift` (1,907 lines) → shell + `AppTheme` + `MonitorPanel` / `MonitorSections` / `ProcessAndDeviceSections` / `MonitorComponents`
+
+## Self-check
+
+```bash
+./scripts/verify.sh          # 编译 + 静态检查
+./scripts/verify.sh --test   # 额外跑单元测试
+```
+
+When Xcode is present the script does a real `xcodebuild build` and reports the
+error/warning counts, then runs the two static checks. When only
+CommandLineTools is installed it degrades to `swiftc -parse` — that mode cannot
+type-check SwiftUI macros, so treat it as a syntax gate only.
+
+`xcode-select` may still point at CommandLineTools even when Xcode is
+installed. The script handles this by exporting
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`; do the same
+manually if you call `xcodebuild` yourself.
+
+The two static checks (duplicate / `private`-leak detection, and a heuristic
+scan for `switch` statements missing an enum case) are redundant with the
+compiler when a real build runs, but their messages are more focused. The
+`switch` check exists because adding a `ViewMode` case and forgetting one of the
+two render switches is a real mistake that has happened.
+
+## Concurrency
+
+The target builds with `-default-isolation MainActor` and `-swift-version 5`.
+Under that flag **every** declaration is main-actor isolated unless marked
+otherwise, which produces "main actor-isolated ... can not be referenced from a
+nonisolated context" warnings (errors in Swift 6) for pure helpers.
+
+Rules when you touch such a site:
+
+- Pure constants and pure helper functions → mark `nonisolated`
+  (`nonisolated static let`, `nonisolated static func`).
+- Default argument values are evaluated in a nonisolated context. Do not put
+  MainActor-isolated initializers there; take an optional parameter and resolve
+  it inside the `init` instead.
+- A MainActor-isolated sync function called from a nonisolated closure becomes
+  an implicit `async` call, which surfaces as "expression is 'async' but is not
+  marked with 'await'" on the *caller's* line. Prefer `nonisolated` over adding
+  `await`.
+
+The project currently builds with **zero warnings**; keep it that way.
 
 ## Conventions
 
-- UI strings are in Chinese (Simplified).
-- All source files are in the flat `CoolRun/` directory — no subdirectories or module separation.
-- No external package dependencies (Sparkle was removed).
-- The gold price refresh interval is configurable in `MacAppDelegate.swift` (`goldPriceRefreshInterval`).
+- UI strings use 4-language localization via `LocalizedString` helper.
+- `@Observable` macro for new view models; `ObservableObject` for legacy stores.
+- `Sendable` conformance for value types crossing actor boundaries.
+- `@MainActor` for view models updating UI state.
+- Tests must not hardcode absolute dates that the code compares against `Date()`.
+  Build fixtures relative to `Date()` — a fixed `pubDate` silently expires once
+  the freshness window passes.
+
+### Adding a module to the navigation rail
+
+`AppSettings` persists the visible module set under `visible_tabs`. Because that
+key already exists on every upgraded install, **changing `ViewMode.defaultVisible`
+alone does nothing for existing users** — the new module stays invisible.
+
+When adding a case to `ViewMode`:
+
+1. Add it to `ViewMode.defaultVisible`.
+2. Bump `ViewMode.visibleTabsSchemaVersion`.
+3. Register it in `ViewMode.modulesAdded(after:)` for the new version.
+
+`AppSettings.init` unions the newly added modules into the stored set once, then
+writes back `visible_tabs` and `visible_tabs_schema`. Forgetting steps 2–3 is the
+exact bug that hid the AI module.
+
+Note the app is **not** sandboxed: real preferences live in
+`~/Library/Preferences/kuao.CoolRun.plist`. A `~/Library/Containers/kuao.CoolRun`
+directory exists but its plist is stale — do not read settings from there.

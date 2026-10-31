@@ -21,13 +21,13 @@ struct GoldEventImpactInput: Sendable {
 
 enum GoldEventImpactAnalyzer {
     // 方向阈值：bearish <= -0.25，bullish >= 0.25
-    private static let directionThreshold = 0.25
+    private nonisolated static let directionThreshold = 0.25
 
     // 收益率证据阈值：|bps| >= 2
-    private static let yieldEvidenceBps = 2.0
+    private nonisolated static let yieldEvidenceBps = 2.0
 
     // 金价证据阈值：|涨跌幅| >= 0.3%
-    private static let goldPriceEvidenceRatio = 0.003
+    private nonisolated static let goldPriceEvidenceRatio = 0.003
 
     nonisolated static func analyze(
         _ input: GoldEventImpactInput,
