@@ -712,7 +712,7 @@ enum LocalizedString {
         case "gold_alert": return l(currentLang, en: "Price Alert", zh: "到价提醒", ja: "価格アラート", ko: "가격 알림")
         case "gold_alert_upper": return l(currentLang, en: "Upper Limit (¥/g)", zh: "上限价（元/克）", ja: "上限価格（元/g）", ko: "상한 가격 (위안/g)")
         case "gold_alert_lower": return l(currentLang, en: "Lower Limit (¥/g)", zh: "下限价（元/克）", ja: "下限価格（元/g）", ko: "하한 가격 (위안/g)")
-        case "gold_alert_note": return l(currentLang, en: "Sends a system notification when the price crosses a limit. Re-arms after the price moves back inside.", zh: "金价触达上限或下限时发系统通知；价格回到区间内后会重新监控，避免反复提醒。", ja: "価格が上限・下限に達すると通知します。区間内に戻ると再監視します。", ko: "가격이 상한/하한에 도달하면 알림을 보냅니다. 구간 안으로 돌아오면 다시 감시합니다.")
+        case "gold_alert_note": return l(currentLang, en: "Sends a system notification when the price is beyond a limit. At most once per day per direction.", zh: "金价超出上限或下限时发系统通知；每个方向每天最多提醒一次。", ja: "価格が上限・下限を外れると通知します。方向ごとに1日1回までです。", ko: "가격이 상한/하한을 벗어나면 알림을 보냅니다. 방향별로 하루 한 번만 알립니다.")
         case "english_voice": return l(currentLang, en: "English Voice", zh: "英语语音", ja: "英語音声", ko: "영어 음성")
         case "english_voice_desc": return l(currentLang, en: "Choose an accent, installed system voice and speaking speed", zh: "选择口音、系统语音和朗读速度", ja: "アクセント、インストール済みの音声、読み上げ速度を選択", ko: "억양, 설치된 시스템 음성과 말하기 속도 선택")
         case "continuous_learning": return l(currentLang, en: "Continuous Learning", zh: "连续学习", ja: "連続学習", ko: "연속 학습")

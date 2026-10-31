@@ -4,8 +4,17 @@ import UserNotifications
 
 // MARK: - 金价到价提醒
 
-/// 到价提醒管理器：金价轮询成功后检查是否触达用户设定的上/下限，
-/// 触达时发一次系统通知；价格回到阈值内侧后重新武装，避免反复轰炸。
+/// 到价提醒管理器：金价轮询成功后检查是否触达用户设定的上/下限。
+///
+/// 触发规则：**每个方向、每个自然日最多提醒一次。**
+/// 早先的实现是「价格回落 0.5% 就重新武装 + 同方向最短间隔 30 分钟」，
+/// 金价在阈值附近震荡时一天能响几十次；而且触发状态只存在内存里，
+/// 重启 App 会清零，导致当天已经提醒过的那次又被补一遍。
+///
+/// 现在的语义：
+/// - 同一自然日内，某个方向提醒过一次就不再提醒（跨日自动重新武装）；
+/// - 用户改动阈值视为重新武装，改完立刻按新阈值判断，不用等到第二天；
+/// - 触发记录落 UserDefaults，重启 App 不会重复提醒。
 @MainActor
 final class GoldPriceAlertManager {
     static let shared = GoldPriceAlertManager()
@@ -18,83 +27,109 @@ final class GoldPriceAlertManager {
 
     /// 触发状态（纯值类型，便于单测）。
     struct State: Equatable, Sendable {
-        /// 上限已触发（等待价格回落重新武装）
-        var upperFired = false
-        /// 下限已触发（等待价格回升重新武装）
-        var lowerFired = false
-        /// 各方向最近一次触发时间
+        /// 各方向最近一次触发时间。与 `now` 落在同一自然日内则不再触发。
         var lastUpperFiredAt: Date?
         var lastLowerFiredAt: Date?
+        /// 触发时使用的阈值。用户改了阈值视为重新武装。
+        var upperThreshold: Double?
+        var lowerThreshold: Double?
     }
 
-    /// 同方向两次通知的最短间隔。
-    nonisolated static let minimumInterval: TimeInterval = 30 * 60
-    /// 重新武装需要回到阈值内侧的比例（0.5%）。
-    nonisolated static let rearmMargin = 0.005
+    private enum Keys {
+        static let lastUpperFiredAt = "gold_alert_last_upper_fired_at"
+        static let lastLowerFiredAt = "gold_alert_last_lower_fired_at"
+        static let upperThreshold = "gold_alert_upper_threshold"
+        static let lowerThreshold = "gold_alert_lower_threshold"
+    }
 
-    private var state = State()
+    private var state: State
     private var hasRequestedAuthorization = false
 
-    private init() {}
+    private init() {
+        let defaults = UserDefaults.standard
+        func storedDate(_ key: String) -> Date? {
+            guard let raw = defaults.object(forKey: key) as? Double, raw > 0 else { return nil }
+            return Date(timeIntervalSince1970: raw)
+        }
+        func storedThreshold(_ key: String) -> Double? {
+            guard let raw = defaults.object(forKey: key) as? Double, raw > 0 else { return nil }
+            return raw
+        }
+        state = State(
+            lastUpperFiredAt: storedDate(Keys.lastUpperFiredAt),
+            lastLowerFiredAt: storedDate(Keys.lastLowerFiredAt),
+            upperThreshold: storedThreshold(Keys.upperThreshold),
+            lowerThreshold: storedThreshold(Keys.lowerThreshold)
+        )
+    }
 
     /// 纯函数：根据当前价、阈值和上次状态判断是否触发。
+    ///
+    /// 上下限同轮都满足时优先报下限（跌破风险更高），与旧行为保持一致。
     nonisolated static func evaluate(
         price: Double,
         upper: Double?,
         lower: Double?,
         state: State,
-        now: Date = Date()
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> (alert: Direction?, newState: State) {
         var newState = state
         var alert: Direction?
 
-        // 上限：上穿触发一次，回落到 upper*(1-0.5%) 以下重新武装
         if let upper, upper > 0 {
-            if state.upperFired {
-                if price <= upper * (1 - rearmMargin) {
-                    newState.upperFired = false
-                }
-            } else if price >= upper {
-                let intervalOK = state.lastUpperFiredAt.map {
-                    now.timeIntervalSince($0) >= minimumInterval
-                } ?? true
-                if intervalOK {
-                    alert = .upper
-                    newState.upperFired = true
-                    newState.lastUpperFiredAt = now
-                } else {
-                    // 间隔不足：仍然锁定，避免下轮重复判定
-                    newState.upperFired = true
-                }
+            if price >= upper, shouldFire(
+                now: now,
+                lastFiredAt: state.lastUpperFiredAt,
+                armedThreshold: state.upperThreshold,
+                threshold: upper,
+                calendar: calendar
+            ) {
+                alert = .upper
+                newState.lastUpperFiredAt = now
             }
+            newState.upperThreshold = upper
         } else {
-            newState.upperFired = false
+            // 阈值被清空：连同记录一起清掉，下次填回来能正常触发
+            newState.lastUpperFiredAt = nil
+            newState.upperThreshold = nil
         }
 
-        // 下限：下穿触发一次，回升到 lower*(1+0.5%) 以上重新武装
         if let lower, lower > 0 {
-            if state.lowerFired {
-                if price >= lower * (1 + rearmMargin) {
-                    newState.lowerFired = false
-                }
-            } else if price <= lower {
-                let intervalOK = state.lastLowerFiredAt.map {
-                    now.timeIntervalSince($0) >= minimumInterval
-                } ?? true
-                if intervalOK {
-                    // 上下限同轮都满足时优先报下限（跌破风险更高）
-                    alert = .lower
-                    newState.lowerFired = true
-                    newState.lastLowerFiredAt = now
-                } else {
-                    newState.lowerFired = true
-                }
+            if price <= lower, shouldFire(
+                now: now,
+                lastFiredAt: state.lastLowerFiredAt,
+                armedThreshold: state.lowerThreshold,
+                threshold: lower,
+                calendar: calendar
+            ) {
+                alert = .lower
+                newState.lastLowerFiredAt = now
             }
+            newState.lowerThreshold = lower
         } else {
-            newState.lowerFired = false
+            newState.lastLowerFiredAt = nil
+            newState.lowerThreshold = nil
         }
 
         return (alert, newState)
+    }
+
+    /// 这一轮是否该发提醒。
+    ///
+    /// - 阈值和上次触发时不一致 → 用户改过设置，视为重新武装，立刻按新阈值判断；
+    /// - 上次触发和现在不在同一个自然日 → 新的一天，重新武装；
+    /// - 其余情况（当天已经提醒过）→ 静默。
+    nonisolated static func shouldFire(
+        now: Date,
+        lastFiredAt: Date?,
+        armedThreshold: Double?,
+        threshold: Double,
+        calendar: Calendar = .current
+    ) -> Bool {
+        if armedThreshold != threshold { return true }
+        guard let lastFiredAt else { return true }
+        return !calendar.isDate(now, inSameDayAs: lastFiredAt)
     }
 
     /// 轮询成功后调用：检查阈值并按需发通知。
@@ -104,8 +139,16 @@ final class GoldPriceAlertManager {
 
         let upper = Self.parseThreshold(settings.goldAlertUpperText)
         let lower = Self.parseThreshold(settings.goldAlertLowerText)
-        guard upper != nil || lower != nil else { return }
+        guard upper != nil || lower != nil else {
+            // 阈值都清空了：重置状态，避免残留记录压制以后重新填写的阈值
+            if state != State() {
+                state = State()
+                persist()
+            }
+            return
+        }
 
+        let previous = state
         let result = Self.evaluate(
             price: quote.cnyPerGram,
             upper: upper,
@@ -113,6 +156,9 @@ final class GoldPriceAlertManager {
             state: state
         )
         state = result.newState
+        if state != previous {
+            persist()
+        }
 
         if let direction = result.alert {
             let threshold = direction == .upper ? upper : lower
@@ -139,6 +185,30 @@ final class GoldPriceAlertManager {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = Double(trimmed), value > 0 else { return nil }
         return value
+    }
+
+    private func persist() {
+        let defaults = UserDefaults.standard
+        if let value = state.lastUpperFiredAt?.timeIntervalSince1970 {
+            defaults.set(value, forKey: Keys.lastUpperFiredAt)
+        } else {
+            defaults.removeObject(forKey: Keys.lastUpperFiredAt)
+        }
+        if let value = state.lastLowerFiredAt?.timeIntervalSince1970 {
+            defaults.set(value, forKey: Keys.lastLowerFiredAt)
+        } else {
+            defaults.removeObject(forKey: Keys.lastLowerFiredAt)
+        }
+        if let value = state.upperThreshold {
+            defaults.set(value, forKey: Keys.upperThreshold)
+        } else {
+            defaults.removeObject(forKey: Keys.upperThreshold)
+        }
+        if let value = state.lowerThreshold {
+            defaults.set(value, forKey: Keys.lowerThreshold)
+        } else {
+            defaults.removeObject(forKey: Keys.lowerThreshold)
+        }
     }
 
     private func sendNotification(direction: Direction, price: Double, threshold: Double) {
@@ -171,8 +241,10 @@ final class GoldPriceAlertManager {
             )
         content.sound = .default
 
+        // 每个方向固定一个 identifier：新提醒直接替换旧的，
+        // 避免每天一条在通知中心越堆越多。
         let request = UNNotificationRequest(
-            identifier: "gold-price-alert-\(direction.rawValue)-\(Int(Date().timeIntervalSince1970))",
+            identifier: "gold-price-alert-\(direction.rawValue)",
             content: content,
             trigger: nil
         )

@@ -5,155 +5,161 @@ final class GoldPriceAlertTests: XCTestCase {
 
     private typealias State = GoldPriceAlertManager.State
 
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    /// 固定时区的日历，避免用例结果随运行机器的时区漂移。
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 8 * 3600)!
+        return calendar
+    }()
 
-    // MARK: - 上穿触发
+    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
+        calendar.date(from: DateComponents(
+            year: year, month: month, day: day, hour: hour, minute: minute
+        ))!
+    }
 
-    func testUpperCrossFiresOnce() {
-        // 上穿上限触发一次
-        let first = GoldPriceAlertManager.evaluate(
-            price: 901, upper: 900, lower: nil, state: State(), now: now
+    private func evaluate(
+        price: Double,
+        upper: Double?,
+        lower: Double?,
+        state: State,
+        now: Date
+    ) -> (alert: GoldPriceAlertManager.Direction?, newState: State) {
+        GoldPriceAlertManager.evaluate(
+            price: price, upper: upper, lower: lower, state: state, now: now, calendar: calendar
         )
+    }
+
+    // MARK: - 每个自然日只提醒一次
+
+    func testUpperFiresOncePerCalendarDay() {
+        let day1 = date(2026, 10, 31, 10, 0)
+
+        let first = evaluate(price: 901, upper: 900, lower: nil, state: State(), now: day1)
         XCTAssertEqual(first.alert, .upper)
-        XCTAssertTrue(first.newState.upperFired)
+        XCTAssertEqual(first.newState.lastUpperFiredAt, day1)
 
-        // 价格继续在上限之上：已锁定，不重复触发
-        let second = GoldPriceAlertManager.evaluate(
-            price: 905, upper: 900, lower: nil, state: first.newState, now: now.addingTimeInterval(60)
+        // 同一天内价格继续在上限之上：静默
+        let sameDayLater = evaluate(
+            price: 905, upper: 900, lower: nil,
+            state: first.newState, now: day1.addingTimeInterval(60)
         )
-        XCTAssertNil(second.alert)
-        XCTAssertTrue(second.newState.upperFired)
+        XCTAssertNil(sameDayLater.alert)
+
+        // 同一天深夜：仍然静默（旧实现这里会因「回落 0.5% 重新武装」再次触发）
+        let sameDayNight = evaluate(
+            price: 910, upper: 900, lower: nil,
+            state: sameDayLater.newState, now: date(2026, 10, 31, 23, 59)
+        )
+        XCTAssertNil(sameDayNight.alert)
+
+        // 跨到第二天：重新武装，再提醒一次
+        let nextDay = evaluate(
+            price: 905, upper: 900, lower: nil,
+            state: sameDayNight.newState, now: date(2026, 11, 1, 9, 0)
+        )
+        XCTAssertEqual(nextDay.alert, .upper)
+    }
+
+    func testLowerFiresOncePerCalendarDay() {
+        let day1 = date(2026, 10, 31, 10, 0)
+
+        let first = evaluate(price: 799, upper: nil, lower: 800, state: State(), now: day1)
+        XCTAssertEqual(first.alert, .lower)
+        XCTAssertEqual(first.newState.lastLowerFiredAt, day1)
+
+        let sameDay = evaluate(
+            price: 795, upper: nil, lower: 800,
+            state: first.newState, now: day1.addingTimeInterval(600)
+        )
+        XCTAssertNil(sameDay.alert)
+
+        let nextDay = evaluate(
+            price: 795, upper: nil, lower: 800,
+            state: sameDay.newState, now: date(2026, 11, 1, 0, 1)
+        )
+        XCTAssertEqual(nextDay.alert, .lower)
     }
 
     func testUpperNotFiredBelowThreshold() {
-        let result = GoldPriceAlertManager.evaluate(
-            price: 899.99, upper: 900, lower: nil, state: State(), now: now
+        let result = evaluate(
+            price: 899.99, upper: 900, lower: nil, state: State(), now: date(2026, 10, 31, 10, 0)
         )
         XCTAssertNil(result.alert)
-        XCTAssertFalse(result.newState.upperFired)
+        XCTAssertNil(result.newState.lastUpperFiredAt)
     }
 
-    // MARK: - 下穿触发
-
-    func testLowerCrossFiresOnce() {
-        let first = GoldPriceAlertManager.evaluate(
-            price: 799, upper: nil, lower: 800, state: State(), now: now
-        )
-        XCTAssertEqual(first.alert, .lower)
-        XCTAssertTrue(first.newState.lowerFired)
-
-        let second = GoldPriceAlertManager.evaluate(
-            price: 795, upper: nil, lower: 800, state: first.newState, now: now.addingTimeInterval(60)
-        )
-        XCTAssertNil(second.alert)
-    }
-
+    /// 上下限同轮都满足（上限设得比下限低的极端配置）时优先报下限。
     func testLowerWinsWhenBothCrossed() {
-        // 上下限同轮都满足（上限设得比下限低的极端配置）时优先报下限
-        let result = GoldPriceAlertManager.evaluate(
-            price: 850, upper: 800, lower: 900, state: State(), now: now
-        )
+        let now = date(2026, 10, 31, 10, 0)
+        let result = evaluate(price: 850, upper: 800, lower: 900, state: State(), now: now)
         XCTAssertEqual(result.alert, .lower)
-        XCTAssertTrue(result.newState.upperFired)
-        XCTAssertTrue(result.newState.lowerFired)
+        XCTAssertEqual(result.newState.lastUpperFiredAt, now)
+        XCTAssertEqual(result.newState.lastLowerFiredAt, now)
     }
 
-    // MARK: - 回落重新武装
+    /// 上下限互不干扰：上限当天已提醒，不影响下限当天提醒。
+    func testDirectionsAreIndependentWithinSameDay() {
+        let now = date(2026, 10, 31, 10, 0)
+        let upperFired = evaluate(price: 901, upper: 900, lower: 800, state: State(), now: now)
+        XCTAssertEqual(upperFired.alert, .upper)
 
-    func testUpperRearmsAfterPriceFallsBackInside() {
-        var state = State()
-        state.upperFired = true
-        state.lastUpperFiredAt = now.addingTimeInterval(-3600)
-
-        // 未回落到 900×(1−0.5%)=895.5 以下：保持锁定
-        let stillLocked = GoldPriceAlertManager.evaluate(
-            price: 897, upper: 900, lower: nil, state: state, now: now
+        let lowerFired = evaluate(
+            price: 799, upper: 900, lower: 800,
+            state: upperFired.newState, now: now.addingTimeInterval(600)
         )
-        XCTAssertNil(stillLocked.alert)
-        XCTAssertTrue(stillLocked.newState.upperFired)
+        XCTAssertEqual(lowerFired.alert, .lower)
+    }
 
-        // 回落到阈值内侧 0.5% 以下：重新武装
-        let rearmed = GoldPriceAlertManager.evaluate(
-            price: 895, upper: 900, lower: nil, state: state, now: now
-        )
-        XCTAssertNil(rearmed.alert)
-        XCTAssertFalse(rearmed.newState.upperFired)
+    // MARK: - 改阈值即重新武装
 
-        // 再次上穿：可再触发
-        let fired = GoldPriceAlertManager.evaluate(
-            price: 901, upper: 900, lower: nil, state: rearmed.newState, now: now.addingTimeInterval(60)
-        )
+    func testChangingThresholdRearmsImmediately() {
+        let now = date(2026, 10, 31, 10, 0)
+        let fired = evaluate(price: 901, upper: 900, lower: nil, state: State(), now: now)
         XCTAssertEqual(fired.alert, .upper)
+
+        // 当天把上限从 900 调到 950，价格 960 已经越过新上限：应该立刻提醒，
+        // 不能因为「今天已经提醒过」被压制到明天。
+        let afterEdit = evaluate(
+            price: 960, upper: 950, lower: nil,
+            state: fired.newState, now: now.addingTimeInterval(120)
+        )
+        XCTAssertEqual(afterEdit.alert, .upper)
     }
 
-    func testLowerRearmsAfterPriceRisesBackInside() {
-        var state = State()
-        state.lowerFired = true
-        state.lastLowerFiredAt = now.addingTimeInterval(-3600)
-
-        // 回升到 800×(1+0.5%)=804 以上：重新武装
-        let rearmed = GoldPriceAlertManager.evaluate(
-            price: 805, upper: nil, lower: 800, state: state, now: now
+    func testSameThresholdDoesNotRearm() {
+        let now = date(2026, 10, 31, 10, 0)
+        let fired = evaluate(price: 901, upper: 900, lower: nil, state: State(), now: now)
+        let again = evaluate(
+            price: 960, upper: 900, lower: nil,
+            state: fired.newState, now: now.addingTimeInterval(120)
         )
-        XCTAssertFalse(rearmed.newState.lowerFired)
-
-        let fired = GoldPriceAlertManager.evaluate(
-            price: 799, upper: nil, lower: 800, state: rearmed.newState, now: now.addingTimeInterval(60)
-        )
-        XCTAssertEqual(fired.alert, .lower)
+        XCTAssertNil(again.alert)
     }
 
-    // MARK: - 最短间隔抑制
-
-    func testMinimumIntervalSuppressesRefire() {
-        // 触发后快速回落又上穿：距上次触发不足 30 分钟，静默锁定
-        let first = GoldPriceAlertManager.evaluate(
-            price: 901, upper: 900, lower: nil, state: State(), now: now
-        )
-        XCTAssertEqual(first.alert, .upper)
-
-        let rearmed = GoldPriceAlertManager.evaluate(
-            price: 895, upper: 900, lower: nil, state: first.newState, now: now.addingTimeInterval(300)
-        )
-        XCTAssertFalse(rearmed.newState.upperFired)
-
-        let suppressed = GoldPriceAlertManager.evaluate(
-            price: 902, upper: 900, lower: nil, state: rearmed.newState, now: now.addingTimeInterval(600)
-        )
-        XCTAssertNil(suppressed.alert)
-        // 仍锁定，避免下一轮重复判定
-        XCTAssertTrue(suppressed.newState.upperFired)
-
-        // 超过 30 分钟后再上穿（先回落重新武装）：可再触发
-        let rearmedAgain = GoldPriceAlertManager.evaluate(
-            price: 895, upper: 900, lower: nil, state: suppressed.newState, now: now.addingTimeInterval(700)
-        )
-        let refired = GoldPriceAlertManager.evaluate(
-            price: 903, upper: 900, lower: nil, state: rearmedAgain.newState,
-            now: now.addingTimeInterval(GoldPriceAlertManager.minimumInterval + 60)
-        )
-        XCTAssertEqual(refired.alert, .upper)
-    }
-
-    // MARK: - 阈值解析与空阈值
+    // MARK: - 空阈值
 
     func testNoThresholdsNeverFires() {
-        let result = GoldPriceAlertManager.evaluate(
-            price: 900, upper: nil, lower: nil, state: State(), now: now
+        let result = evaluate(
+            price: 900, upper: nil, lower: nil, state: State(), now: date(2026, 10, 31, 10, 0)
         )
         XCTAssertNil(result.alert)
         XCTAssertEqual(result.newState, State())
     }
 
-    func testClearingThresholdResetsFiredFlag() {
+    func testClearingThresholdResetsState() {
         var state = State()
-        state.upperFired = true
+        state.lastUpperFiredAt = date(2026, 10, 31, 9, 0)
+        state.upperThreshold = 900
 
-        let result = GoldPriceAlertManager.evaluate(
-            price: 950, upper: nil, lower: nil, state: state, now: now
+        let result = evaluate(
+            price: 950, upper: nil, lower: nil, state: state, now: date(2026, 10, 31, 10, 0)
         )
-        XCTAssertFalse(result.newState.upperFired)
+        XCTAssertNil(result.newState.lastUpperFiredAt)
+        XCTAssertNil(result.newState.upperThreshold)
     }
+
+    // MARK: - 阈值解析
 
     func testParseThreshold() {
         XCTAssertEqual(GoldPriceAlertManager.parseThreshold(" 880.5 "), 880.5)
