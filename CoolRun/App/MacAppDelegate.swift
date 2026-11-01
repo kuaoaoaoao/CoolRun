@@ -65,9 +65,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
                 onPinChange: { [weak self] pinned in
                     self?.setPopoverPinned(pinned)
                 },
-                onViewModeChange: { [weak self] mode in
-                    self?.resizePopover(for: mode)
-                }
+            onViewModeChange: { [weak self] mode, size in
+                self?.resizePopover(for: mode, measuredSize: size)
+            }
             )
         )
 
@@ -325,12 +325,21 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         popover.behavior = pinned ? .applicationDefined : .transient
     }
 
-    /// 按模块调整面板尺寸。各模块画布不同（黄金/诊断需要更大空间），
-    /// 这里统一从 `ViewMode.panelSize` 取，避免视图与 popover 尺寸脱节。
-    private func resizePopover(for mode: ViewMode) {
-        let size = mode.panelSize
-        guard popover.contentSize != size else { return }
-        popover.contentSize = size
+    /// 按模块调整面板尺寸。优先使用 GeometryReader 测量到的实际内容尺寸，
+    /// 实现高度自适应；测量值无效时回退到固定 `panelSize`。
+    private func resizePopover(for mode: ViewMode, measuredSize: CGSize) {
+        let targetSize: CGSize
+        if measuredSize.height > 0 {
+            // 使用测量到的实际尺寸 + 外边距
+            targetSize = CGSize(
+                width: measuredSize.width + ViewMode.panelOuterInset * 2,
+                height: measuredSize.height + ViewMode.panelOuterInset * 2
+            )
+        } else {
+            targetSize = mode.panelSize
+        }
+        guard popover.contentSize != targetSize else { return }
+        popover.contentSize = targetSize
     }
 
     private func showContextMenu() {

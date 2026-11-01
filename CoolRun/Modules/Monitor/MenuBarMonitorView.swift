@@ -15,7 +15,8 @@ struct MenuBarMonitorView: View {
     @Bindable private var pinState: PopoverPinState
     private let onPinChange: (Bool) -> Void
     /// 切换模块时通知宿主调整 popover 尺寸（各模块画布大小不同）。
-    private let onViewModeChange: ((ViewMode) -> Void)?
+    /// 现在同时传递测量后的实际内容尺寸，实现高度自适应。
+    private let onViewModeChange: ((ViewMode, CGSize) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var router = AppNavigationRouter.shared
@@ -25,12 +26,14 @@ struct MenuBarMonitorView: View {
     @State private var tradeStore = GoldTradeStore.shared
     @State private var codexModel = CodexMonitorViewModel.shared
     @State private var claudeModel = ClaudeMonitorViewModel.shared
+    /// 通过 GeometryReader 测量到的内容实际尺寸，用于 popover 高度自适应。
+    @State private var measuredContentSize: CGSize = .zero
 
     init(
         viewModel: SystemMonitorViewModel,
         pinState: PopoverPinState,
         onPinChange: @escaping (Bool) -> Void,
-        onViewModeChange: ((ViewMode) -> Void)? = nil
+        onViewModeChange: ((ViewMode, CGSize) -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         _pinState = Bindable(wrappedValue: pinState)
@@ -100,17 +103,38 @@ struct MenuBarMonitorView: View {
         }
         .frame(
             width: viewMode.panelContentSize.width,
-            height: viewMode.panelContentSize.height,
+            height: measuredContentSize.height > 0 ? measuredContentSize.height : viewMode.panelContentSize.height,
             alignment: .top
         )
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        let contentSize = geo.size
+                        if measuredContentSize != contentSize {
+                            measuredContentSize = contentSize
+                        }
+                    }
+                    .onChange(of: geo.size) { _, newSize in
+                        if measuredContentSize != newSize {
+                            measuredContentSize = newSize
+                        }
+                    }
+            }
+        }
         .padding(ViewMode.panelOuterInset)
+        .onChange(of: measuredContentSize) { _, newSize in
+            onViewModeChange?(viewMode, newSize)
+        }
         .onChange(of: viewMode) { _, newValue in
             AppSettings.shared.lastViewModeRaw = newValue.rawValue
-            onViewModeChange?(newValue)
+            // viewMode 切换时先重置测量值，让新模块自然布局后再测量
+            measuredContentSize = .zero
+            onViewModeChange?(newValue, newValue.panelContentSize)
         }
         .onAppear {
-            // 首次展示时把真实画布尺寸同步给 popover，避免固定值与模块不匹配
-            onViewModeChange?(viewMode)
+            // 首次展示时把真实画布尺寸同步给 popover
+            onViewModeChange?(viewMode, viewMode.panelContentSize)
         }
         // 当前模块在设置中被隐藏时，自动切到第一个可见模块
         .onChange(of: settings.visibleTabRaws) { _, _ in
