@@ -27,6 +27,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     private var activeAnimationFramesPerSecond: Double?
     private var rotationUsesSecondary = false
     private var lastMenuBarRotationAt = Date()
+    /// 面板显示期间的事件监听器，用于捕获 Cmd+, / Cmd+W 等全局快捷键。
+    private var keyboardEventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -130,6 +132,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
         // 启动后台自动检查更新
         UpdateChecker.shared.startAutoCheck()
+
+        // 注册崩溃收集器
+        CrashReporter.shared.install()
     }
 
     private func observeNavigationRequests() {
@@ -318,6 +323,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         Analytics.capture(.popoverOpened)
+        installKeyboardShortcuts()
     }
 
     private func setPopoverPinned(_ pinned: Bool) {
@@ -400,11 +406,40 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         if popoverPinState.isPinned {
             setPopoverPinned(false)
         }
+
+        removeKeyboardShortcuts()
     }
 
     private func openSettingsFromContextMenu() {
         prepareToOpenSettings()
         Analytics.capture(.settingsOpened)
+    }
+
+    // MARK: - 键盘快捷键
+
+    /// 注册面板显示期间的全局快捷键：Cmd+, 打开设置、Cmd+W 关闭面板。
+    private func installKeyboardShortcuts() {
+        removeKeyboardShortcuts()
+        keyboardEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.modifierFlags.contains(.command) else { return event }
+            switch event.charactersIgnoringModifiers {
+            case ",":
+                self?.prepareToOpenSettings()
+                return nil
+            case "w", "W":
+                self?.closeMonitorPopover(unpin: true)
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeKeyboardShortcuts() {
+        if let monitor = keyboardEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyboardEventMonitor = nil
+        }
     }
 
     // 课本管理面板 660x520，不能在 320pt 弹窗里用 sheet 弹出，改用独立窗口。

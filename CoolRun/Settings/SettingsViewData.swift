@@ -59,6 +59,51 @@ extension SettingsView {
                     label: LocalizedString.settings("report_issue"),
                     url: AppLinks.issues
                 )
+                Divider().padding(.horizontal, 12)
+                Button {
+                    if let url = URL(string: "mailto:\(AppLinks.feedbackEmail)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .frame(width: 28, height: 28)
+                            .background(AppTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(LocalizedString.l(
+                                settings.language,
+                                en: "Send Feedback",
+                                zh: "发送反馈",
+                                ja: "フィードバックを送信",
+                                ko: "피드 보내기"
+                            ))
+                            .font(.subheadline.weight(.medium))
+                            Text(AppLinks.feedbackEmail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LocalizedString.l(
+                    settings.language,
+                    en: "Send Feedback",
+                    zh: "发送反馈",
+                    ja: "フィードバックを送信",
+                    ko: "피드백 보내기"
+                ))
             }
             .appCardSurface(cornerRadius: 12, showsShadow: false)
         }

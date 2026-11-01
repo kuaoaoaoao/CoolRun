@@ -78,6 +78,14 @@ struct GoldAnalysisView: View {
                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
             }
             .lineLimit(1)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(LocalizedString.l(
+                appSettings.language,
+                en: "Gold watch, Price, position and risk",
+                zh: "黄金观察，价格、持仓与风险提示",
+                ja: "金相場、価格・保有・リスク",
+                ko: "금 시세, 가격, 보유 및 위험"
+            ))
 
             Spacer(minLength: 4)
 
@@ -112,6 +120,7 @@ struct GoldAnalysisView: View {
                             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(tab.title(lang: appSettings.language))
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 }
             }
@@ -145,6 +154,7 @@ struct GoldAnalysisView: View {
             }
             .buttonStyle(.plain)
             .disabled(isManualRefreshing)
+            .accessibilityLabel(LocalizedString.l(appSettings.language, en: "Refresh now", zh: "立即刷新", ja: "今すぐ更新", ko: "지금 새로고침"))
             .help(LocalizedString.l(appSettings.language, en: "Refresh now", zh: "立即刷新", ja: "今すぐ更新", ko: "지금 새로고침"))
         }
         .padding(.horizontal, GoldLayout.contentInset)

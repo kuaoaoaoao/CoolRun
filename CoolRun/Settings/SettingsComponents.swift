@@ -724,6 +724,7 @@ enum AppLinks {
     static let releases = URL(string: "https://github.com/kuaoaoaoao/CoolRun/releases")!
     static let privacy = URL(string: "https://github.com/kuaoaoaoao/CoolRun/blob/main/PRIVACY.md")!
     static let issues = URL(string: "https://github.com/kuaoaoaoao/CoolRun/issues/new/choose")!
+    static let feedbackEmail = "feedback@coolrun.app"
 }
 
 // MARK: - Preview
