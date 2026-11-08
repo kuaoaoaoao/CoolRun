@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 enum DiagnosticsSection: String, CaseIterable, Identifiable {
+    case cleanup
     case sleep
     case network
     case storage
@@ -11,6 +12,7 @@ enum DiagnosticsSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .cleanup: "sparkles"
         case .sleep: "moon.zzz.fill"
         case .network: "network"
         case .storage: "internaldrive.fill"
@@ -20,6 +22,8 @@ enum DiagnosticsSection: String, CaseIterable, Identifiable {
 
     func title(lang: AppLanguage) -> String {
         switch self {
+        case .cleanup:
+            LocalizedString.l(lang, en: "Cleanup", zh: "清理", ja: "掃除", ko: "정리")
         case .sleep:
             LocalizedString.l(lang, en: "Sleep", zh: "睡眠", ja: "スリープ", ko: "절전")
         case .network:
@@ -33,7 +37,7 @@ enum DiagnosticsSection: String, CaseIterable, Identifiable {
 }
 
 struct DiagnosticsView: View {
-    @State private var selection: DiagnosticsSection = .sleep
+    @State private var selection: DiagnosticsSection = .cleanup
     @State private var model = DiagnosticsViewModel.shared
     @State private var hoveredSection: DiagnosticsSection?
     @ObservedObject private var settings = AppSettings.shared
@@ -46,6 +50,8 @@ struct DiagnosticsView: View {
 
             Group {
                 switch selection {
+                case .cleanup:
+                    CleanupSectionView()
                 case .sleep:
                     SleepDiagnosticsSectionView(model: model)
                 case .network:
