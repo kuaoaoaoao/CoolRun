@@ -13,6 +13,8 @@ struct ClipboardHistoryView: View {
     @State private var copiedEntryID: UUID?
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var kindFilter: ClipKind?
+    @State private var kinds: [UUID: ClipKind] = [:]
+    @State private var kindCounts: [ClipKind: Int] = [:]
     @State private var semanticMatches: Set<UUID>?
     @State private var didSaveNote = false
     @State private var ai = ClipboardAI.shared
@@ -30,10 +32,13 @@ struct ClipboardHistoryView: View {
     private var lang: AppLanguage { settings.language }
 
     /// 关键词过滤 + 类型过滤的结果，语义搜索没跑的时候就是列表内容。
+    ///
+    /// 分类查的是 `kinds` 缓存，不在这里现算——现算的版本把 CPU 打满过，
+    /// 详见 `ClipClassifier` 的注释。
     private var baseEntries: [ClipboardHistoryEntry] {
         let filtered = store.filteredEntries(query: query)
         guard let kind = kindFilter else { return filtered }
-        return filtered.filter { ClipClassifier.kind(of: $0.text) == kind }
+        return filtered.filter { kinds[$0.id] == kind }
     }
 
     private var visibleEntries: [ClipboardHistoryEntry] {
@@ -41,7 +46,13 @@ struct ClipboardHistoryView: View {
         return store.entries.filter { matches.contains($0.id) }
     }
 
-    private var kindCounts: [ClipKind: Int] { ClipClassifier.counts(for: store.entries) }
+    /// 分类结果必须缓存：它依赖全部历史文本，body 每次失效都重算的话，
+    /// 光是分类就能吃掉几十个百分点 CPU。
+    private func refreshKinds() {
+        let classified = ClipClassifier.classify(store.entries)
+        kinds = classified
+        kindCounts = ClipClassifier.counts(from: classified)
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -73,7 +84,17 @@ struct ClipboardHistoryView: View {
                 }
             }
         }
-        .onAppear { store.startMonitoring() }
+        .onAppear {
+            store.startMonitoring()
+            refreshKinds()
+        }
+        .onChange(of: store.entries) { _, _ in
+            refreshKinds()
+        }
+        .task {
+            // onAppear 在某些重建路径下不会重跑，task 兜一次。
+            if kinds.isEmpty { refreshKinds() }
+        }
         .onChange(of: query) { _, _ in
             semanticMatches = nil
             ai.clearSearchState()

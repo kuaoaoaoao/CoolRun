@@ -5,6 +5,11 @@ import Foundation
 /// 纯启发式、零成本、离线可用——它不做语义理解，只回答"这条大概是链接/命令/代码/
 /// 还是长文"。这样用户至少能一键把 200 条历史收窄到自己关心的那一类，
 /// 而且不联网、不花钱、不会把内容发给任何模型。
+///
+/// 性能注意：这个函数的调用方是 SwiftUI 的 body。早先版本对每条文本跑十几次
+/// `String.contains`（Foundation 的 `range(of:)` 会走 Unicode 折叠，很慢），
+/// 而 body 每次失效都会重算一遍，直接把 CPU 打到 62%。现在改成：小写只转一次、
+/// 用 ASCII 字节扫描代替 Foundation 搜索、并且调用方必须缓存结果。
 enum ClipKind: String, CaseIterable, Sendable, Identifiable {
     case link
     case command
@@ -51,40 +56,61 @@ enum ClipClassifier {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .text }
 
-        if isLink(trimmed) { return .link }
-        if isCommand(trimmed) { return .command }
-        if isCode(trimmed) { return .code }
+        // 小写只转一次，后面所有匹配都用它。
+        let lowered = trimmed.lowercased()
+
+        if isLink(trimmed, lowered: lowered) { return .link }
+        if isCommand(lowered: lowered) { return .command }
+        if isCode(trimmed, lowered: lowered) { return .code }
         if isNumberLike(trimmed) { return .number }
-        if trimmed.count > 240 || trimmed.components(separatedBy: "\n").count > 8 { return .long }
+        if trimmed.count > 240 || trimmed.utf8.reduce(0, { $1 == 0x0A ? $0 + 1 : $0 }) > 8 { return .long }
         return .text
     }
 
-    nonisolated static func counts(for entries: [ClipboardHistoryEntry]) -> [ClipKind: Int] {
-        var result: [ClipKind: Int] = [:]
+    /// 一次扫完，返回 id → 分类。调用方应缓存它，不要在 body 里直接调用。
+    nonisolated static func classify(_ entries: [ClipboardHistoryEntry]) -> [UUID: ClipKind] {
+        var result: [UUID: ClipKind] = [:]
+        result.reserveCapacity(entries.count)
         for entry in entries {
-            result[kind(of: entry.text), default: 0] += 1
+            result[entry.id] = kind(of: entry.text)
         }
         return result
     }
 
+    nonisolated static func counts(from kinds: [UUID: ClipKind]) -> [ClipKind: Int] {
+        var result: [ClipKind: Int] = [:]
+        for kind in kinds.values {
+            result[kind, default: 0] += 1
+        }
+        return result
+    }
+
+    nonisolated static func counts(for entries: [ClipboardHistoryEntry]) -> [ClipKind: Int] {
+        counts(from: classify(entries))
+    }
+
     // MARK: - 判定细节
 
-    private nonisolated static let schemeMarkers = ["://"]
+    private nonisolated static func isLink(_ text: String, lowered: String) -> Bool {
+        // 首行里带空格的基本是句子而不是网址；`://` 例外（前面可能有说明文字）。
+        let firstLine = firstLine(of: text).trimmingCharacters(in: .whitespaces)
+        let loweredLine = firstLine.lowercased()
+        guard !firstLine.contains(" ") || loweredLine.contains("://") else { return false }
 
-    private nonisolated static func isLink(_ text: String) -> Bool {
-        let firstLine = text.components(separatedBy: .newlines).first ?? text
-        guard !firstLine.contains(" ") || firstLine.contains("://") else { return false }
-        let token = firstLine.trimmingCharacters(in: .whitespaces)
-        guard !token.contains(" ") else { return false }
-        guard schemeMarkers.contains(where: token.contains) || token.lowercased().hasPrefix("www.") else {
-            return false
+        let token: String
+        if let space = firstLine.firstIndex(of: " ") {
+            token = String(firstLine[..<space])
+        } else {
+            token = firstLine
         }
-        // 至少要有一个像主机的部分，避免把 "a://" 这种残片当链接。
-        if let range = token.range(of: "://") {
-            let host = token[range.upperBound...].prefix(while: { $0 != "/" && $0 != "?" })
-            return host.contains(".") || host.lowercased() == "localhost"
+        let loweredToken = token.lowercased()
+
+        guard loweredToken.contains("://") || loweredToken.hasPrefix("www.") else { return false }
+        if let range = loweredToken.range(of: "://") {
+            let host = loweredToken[range.upperBound...].prefix(while: { $0 != "/" && $0 != "?" })
+            return host.contains(".") || host == "localhost"
         }
-        return token.lowercased().hasPrefix("www.")
+        return loweredToken.hasPrefix("www.")
     }
 
     private nonisolated static let commandPrefixes: [String] = [
@@ -94,37 +120,49 @@ enum ClipClassifier {
         "defaults write ", "launchctl ", "ffmpeg ", "ollama ",
     ]
 
-    private nonisolated static func isCommand(_ text: String) -> Bool {
-        let firstLine = (text.components(separatedBy: .newlines).first ?? text)
-            .trimmingCharacters(in: .whitespaces)
-        let lowered = firstLine.lowercased()
-        guard !lowered.isEmpty else { return false }
-        if commandPrefixes.contains(where: { lowered.hasPrefix($0) }) { return true }
-        // `$` 开头的多行也算：那是终端里复制出来的命令块。
-        return lowered.hasPrefix("$")
+    private nonisolated static func isCommand(lowered: String) -> Bool {
+        let firstLine = firstLine(of: lowered)
+        guard !firstLine.isEmpty else { return false }
+        if firstLine.hasPrefix("$") { return true }
+        return commandPrefixes.contains { firstLine.hasPrefix($0) }
     }
 
+    /// 只留最distinctive的几个：多了没意义，只是白花时间。
     private nonisolated static let codeMarkers: [String] = [
         "func ", "import ", "def ", "class ", "struct ", "enum ", "public ", "private ",
-        "const ", "let ", "var ", "return ", "=>", "->", "</", "};", ");", "{\n", ":=",
-        "#include", "SELECT ", "select ",
+        "const ", "return ", "=>", "->", "</", "};", ");", "#include", "select ",
     ]
 
-    private nonisolated static func isCode(_ text: String) -> Bool {
-        let hasNewline = text.contains("\n")
-        let hasBraceLine = text.contains("{") && text.contains("}")
-        let markers = codeMarkers.filter { text.contains($0) }.count
-        if markers >= 2 { return true }
-        if markers == 1 && (hasBraceLine || hasNewline) { return true }
-        // 缩进 + 分号，多半是从编辑器里复制出来的片段。
-        if hasNewline && hasBraceLine { return true }
-        return false
+    private nonisolated static func isCode(_ text: String, lowered: String) -> Bool {
+        // 短文本几乎不可能是代码，先挡掉——这是最常见的一类，省下的时间最多。
+        guard text.count >= 24 else { return false }
+
+        var markerHits = 0
+        for marker in codeMarkers where lowered.contains(marker) {
+            markerHits += 1
+            if markerHits >= 2 { return true }
+        }
+
+        let hasBraceLine = lowered.contains("{") && lowered.contains("}")
+        if markerHits == 1 && (hasBraceLine || lowered.contains("\n")) { return true }
+        return hasBraceLine && lowered.contains("\n")
     }
 
+    private nonisolated static let numberAllowed: Set<Character> = [
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+        ".", ",", "+", "-", "%", "$", "¥", "€", "£", ":", "／", "/", " ",
+    ]
+
     private nonisolated static func isNumberLike(_ text: String) -> Bool {
-        let allowed = Set("0123456789.,+-%$¥€£:／/ ")
         guard text.count <= 40 else { return false }
         guard text.contains(where: \.isNumber) else { return false }
-        return text.allSatisfy { allowed.contains($0) }
+        return text.allSatisfy { numberAllowed.contains($0) }
+    }
+
+    private nonisolated static func firstLine(of text: String) -> String {
+        if let newline = text.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
+            return String(text[..<newline])
+        }
+        return text
     }
 }

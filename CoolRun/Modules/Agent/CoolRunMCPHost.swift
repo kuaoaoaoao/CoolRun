@@ -52,7 +52,11 @@ final class CoolRunMCPHost {
                     switch state {
                     case .ready:
                         host.port = host.listener?.port?.rawValue
-                        host.token = Self.makeToken()
+                        // 脚本化 UI 测试（以及本机调试）可以用环境变量固定 token，
+                        // 否则每次启动都是随机的、外部读不到。只在显式设置时生效，
+                        // 监听仍然只绑 127.0.0.1。
+                        let override = ProcessInfo.processInfo.environment["COOLRUN_MCP_TOKEN"] ?? ""
+                        host.token = override.isEmpty ? Self.makeToken() : override
                         host.isRunning = true
                         // 留个脚印，排查「工具没生效」时能直接看到端口。
                         UserDefaults.standard.set(Int(host.port ?? 0), forKey: "agent.mcpPort")
