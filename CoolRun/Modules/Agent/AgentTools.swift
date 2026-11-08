@@ -13,6 +13,7 @@ enum AgentTools {
 
         registerSystemTools()
         registerGoldTools()
+        AgentGoldTools.registerAll()
         registerCalendarTools()
         registerEnglishTools()
         registerQuotaTools()

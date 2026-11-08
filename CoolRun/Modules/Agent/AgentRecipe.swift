@@ -86,6 +86,31 @@ extension AgentRecipe {
             slash: "金价"
         ),
         AgentRecipe(
+            id: "gold-buy",
+            title: "现在能买吗",
+            subtitle: "技术面、周预测、策略综合判断",
+            symbol: "dollarsign.circle",
+            prompt: """
+            我想知道现在适不适合买黄金。先看技术面，再看这周的预测，\
+            最后跑一遍策略引擎，给我一个明确结论：可以分批买、再等等、还是先别碰。\
+            要引用具体数字，并说清楚什么情况下这个判断会失效。
+            """,
+            requiredTools: ["gold_technical", "gold_forecast", "gold_strategy"],
+            slash: "能买吗"
+        ),
+        AgentRecipe(
+            id: "gold-hold",
+            title: "我的持仓",
+            subtitle: "盈亏、回本缺口和加减仓建议",
+            symbol: "briefcase",
+            prompt: """
+            看看我的黄金持仓。算出现在的盈亏、回本还差多少，结合当前行情给我一个动作建议：\
+            继续拿着、加一点、还是减一点。理由和风险都要说清楚。
+            """,
+            requiredTools: ["gold_position"],
+            slash: "持仓"
+        ),
+        AgentRecipe(
             id: "today-brief",
             title: "今天有什么",
             subtitle: "日程、倒计时、每日英语和额度",

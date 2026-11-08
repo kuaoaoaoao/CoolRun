@@ -79,7 +79,10 @@ final class SwiftAgentEngine: AgentEngine {
         config: AgentRunConfig,
         continuation: AsyncThrowingStream<AgentEvent, Error>.Continuation
     ) async throws {
-        var working = history
+        var working: [AgentMessage] = [
+            AgentMessage(role: .system, content: AgentPrompts.system(for: prompt)),
+        ]
+        working.append(contentsOf: history)
         working.append(AgentMessage(role: .user, content: prompt))
 
         let descriptors = ToolRegistry.shared.descriptors(upTo: AgentSettings.shared.toolLevel)
@@ -118,15 +121,26 @@ final class SwiftAgentEngine: AgentEngine {
                 return AgentToolCall(id: call.id, name: call.name, argumentsText: call.arguments)
             }
 
-            // 没有工具调用 → 本轮就是最终回答
-            guard !toolCalls.isEmpty else {
+            // 模型没走 tool_calls 字段时，正文里可能藏着 <tool_call>{...}</tool_call>。
+            // 能还原就继续跑，不能还原才算最终回答。
+            var effectiveCalls = toolCalls
+            var assistantText = text
+            if effectiveCalls.isEmpty {
+                let salvaged = AgentToolCallParser.parse(text, known: Set(descriptors.map(\.name)))
+                if !salvaged.isEmpty {
+                    effectiveCalls = salvaged
+                    assistantText = ""
+                }
+            }
+
+            guard !effectiveCalls.isEmpty else {
                 continuation.yield(.turnFinished)
                 return
             }
 
-            working.append(AgentMessage(role: .assistant, content: text, toolCalls: toolCalls))
+            working.append(AgentMessage(role: .assistant, content: assistantText, toolCalls: effectiveCalls))
 
-            for call in toolCalls {
+            for call in effectiveCalls {
                 try Task.checkCancellation()
                 let arguments = call.arguments
                 continuation.yield(.toolCallStarted(id: call.id, name: call.name, arguments: arguments))

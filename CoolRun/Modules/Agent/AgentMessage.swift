@@ -113,16 +113,62 @@ extension JSONValue {
     }
 
     /// 生成一份便于模型阅读的缩进文本。
+    ///
+    /// 不用 JSONSerialization：它会把 871.44 打成 871.44000000000005，
+    /// 模型读到一串浮点尾巴既费 token 又容易抄错数。
     nonisolated func prettyJSONString() -> String {
-        guard let data = try? JSONEncoder().encode(self),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let pretty = try? JSONSerialization.data(
-                withJSONObject: object,
-                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-              ),
-              let text = String(data: pretty, encoding: .utf8)
-        else { return compactJSONString() }
-        return text
+        prettyLines(indent: 0)
+    }
+
+    private nonisolated func prettyLines(indent: Int) -> String {
+        let pad = String(repeating: "  ", count: indent)
+        switch self {
+        case .null:
+            return "null"
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .number(let value):
+            guard value.isFinite else { return "null" }
+            if value == value.rounded(), abs(value) < 1e15 {
+                return String(Int64(value))
+            }
+            return "\(value)"
+        case .string(let text):
+            return Self.quoted(text)
+        case .array(let items):
+            guard !items.isEmpty else { return "[]" }
+            let inner = items.map { $0.prettyLines(indent: indent + 1) }.joined(separator: ",\n")
+            let itemPad = String(repeating: "  ", count: indent + 1)
+            return "[\n" + itemPad + inner + "\n" + pad + "]"
+        case .object(let dictionary):
+            guard !dictionary.isEmpty else { return "{}" }
+            let itemPad = String(repeating: "  ", count: indent + 1)
+            let inner = dictionary.keys.sorted().map { key in
+                itemPad + Self.quoted(key) + " : " + (dictionary[key]?.prettyLines(indent: indent + 1) ?? "null")
+            }.joined(separator: ",\n")
+            return "{\n" + inner + "\n" + pad + "}"
+        }
+    }
+
+    nonisolated static func quoted(_ text: String) -> String {
+        var out = "\""
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default:
+                if scalar.value < 0x20 {
+                    out += String(format: "\\u%04x", scalar.value)
+                } else {
+                    out.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        out += "\""
+        return out
     }
 }
 

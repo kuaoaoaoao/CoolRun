@@ -186,3 +186,16 @@ let request = VNGenerateForegroundInstanceMaskRequest()
 - **模型不调工具，只输出 JSON 文本**：模型太弱，换 7B 以上的。
 - **DSH 引擎起不来**：设置里看运行时状态；缺的话点下载。日志在 `~/Library/Application Support/CoolRun/agent-home/`。
 - **快捷键没反应**：可能被别的 app 占了，换一个或者用菜单栏图标。
+
+### 金价分析
+
+空面板里有「现在能买吗」「我的持仓」两张卡，也可以直接问：
+
+- 现在适合买黄金吗
+- 金价这周会怎么走
+- 我手里 20 克成本 820，要不要卖
+
+Agent 会先调 `gold_technical` / `gold_forecast` / `gold_strategy` 拿真实数据，
+再给结论、依据、风险和具体操作。所有回答都基于历史统计与规则模型，
+不构成投资建议。
+
