@@ -12,6 +12,10 @@ struct ClipboardHistoryView: View {
     @State private var showsClearConfirmation = false
     @State private var copiedEntryID: UUID?
     @State private var copyFeedbackTask: Task<Void, Never>?
+    @State private var kindFilter: ClipKind?
+    @State private var semanticMatches: Set<UUID>?
+    @State private var didSaveNote = false
+    @State private var ai = ClipboardAI.shared
 
     @MainActor
     init() {
@@ -24,7 +28,20 @@ struct ClipboardHistoryView: View {
     }
 
     private var lang: AppLanguage { settings.language }
-    private var visibleEntries: [ClipboardHistoryEntry] { store.filteredEntries(query: query) }
+
+    /// 关键词过滤 + 类型过滤的结果，语义搜索没跑的时候就是列表内容。
+    private var baseEntries: [ClipboardHistoryEntry] {
+        let filtered = store.filteredEntries(query: query)
+        guard let kind = kindFilter else { return filtered }
+        return filtered.filter { ClipClassifier.kind(of: $0.text) == kind }
+    }
+
+    private var visibleEntries: [ClipboardHistoryEntry] {
+        guard let matches = semanticMatches else { return baseEntries }
+        return store.entries.filter { matches.contains($0.id) }
+    }
+
+    private var kindCounts: [ClipKind: Int] { ClipClassifier.counts(for: store.entries) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -34,6 +51,14 @@ struct ClipboardHistoryView: View {
                 quickPasteBanner
             }
             searchField
+
+            if store.entries.count >= 6 {
+                kindChips
+            }
+            aiSection
+            if semanticMatches != nil {
+                semanticBanner
+            }
 
             if visibleEntries.isEmpty {
                 emptyState
@@ -49,6 +74,10 @@ struct ClipboardHistoryView: View {
             }
         }
         .onAppear { store.startMonitoring() }
+        .onChange(of: query) { _, _ in
+            semanticMatches = nil
+            ai.clearSearchState()
+        }
         .onDisappear {
             copyFeedbackTask?.cancel()
             copyFeedbackTask = nil
@@ -220,6 +249,214 @@ struct ClipboardHistoryView: View {
         }
     }
 
+    /// 类型过滤条。分类是本地算的（`ClipClassifier`），点一下不联网、不花钱。
+    private var kindChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                chip(nil, title: LocalizedString.l(lang, en: "All", zh: "全部", ja: "すべて", ko: "전체"), count: store.entries.count)
+                ForEach(ClipKind.allCases) { kind in
+                    if let count = kindCounts[kind], count > 0, kind != .text {
+                        chip(kind, title: kind.title(lang), count: count, symbol: kind.symbol)
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private func chip(_ kind: ClipKind?, title: String, count: Int, symbol: String? = nil) -> some View {
+        let selected = kindFilter == kind
+        return Button {
+            kindFilter = selected ? nil : kind
+        } label: {
+            HStack(spacing: 3) {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 8, weight: .semibold))
+                }
+                Text(title).font(.system(size: 9, weight: selected ? .semibold : .regular))
+                Text("\(count)")
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .opacity(0.7)
+            }
+            .foregroundStyle(selected ? Color.white : AppTheme.textSecondary(colorScheme))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                selected ? AppTheme.accent : AppTheme.elevatedSurface(colorScheme),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// AI 整理结果的展示区。只在这条链路被用过之后才出现，平时不占地方。
+    @ViewBuilder
+    private var aiSection: some View {
+        if ai.isWorking || !ai.output.isEmpty || ai.errorMessage != nil {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                    Text(ai.isWorking
+                        ? LocalizedString.l(lang, en: "Tidying up…", zh: "本鱼在整理…", ja: "整えています…", ko: "정리 중…")
+                        : (ai.lastAction?.title(lang) ?? LocalizedString.l(lang, en: "Result", zh: "整理结果", ja: "結果", ko: "결과")))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppTheme.textPrimary(colorScheme))
+
+                    if ai.wasTruncated, !ai.isWorking {
+                        Text(LocalizedString.l(lang, en: "· first 6000 chars only", zh: "· 只看了前 6000 字", ja: "· 先頭6000字のみ", ko: "· 앞 6000자만"))
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(AppTheme.warning)
+                    }
+
+                    Spacer(minLength: 2)
+
+                    if !ai.isWorking {
+                        Button {
+                            ai.clearOutput()
+                            didSaveNote = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    }
+                }
+
+                if let error = ai.errorMessage {
+                    Text(error)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(AppTheme.critical)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !ai.output.isEmpty {
+                    ScrollView(.vertical) {
+                        Text(ai.output)
+                            .font(.system(size: 10))
+                            .foregroundStyle(AppTheme.textPrimary(colorScheme))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 110)
+
+                    HStack(spacing: 6) {
+                        Button {
+                            copyText(ai.output)
+                        } label: {
+                            Label(LocalizedString.common("copy", lang: lang), systemImage: "doc.on.doc")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+
+                        Button {
+                            didSaveNote = ai.saveAsNote(ai.output)
+                        } label: {
+                            Label(
+                                didSaveNote
+                                    ? LocalizedString.l(lang, en: "Saved", zh: "已存", ja: "保存済み", ko: "저장됨")
+                                    : LocalizedString.l(lang, en: "Save to Notes", zh: "存成笔记", ja: "ノートに保存", ko: "노트에 저장"),
+                                systemImage: didSaveNote ? "checkmark" : "note.text.badge.plus"
+                            )
+                            .font(.system(size: 9, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .disabled(didSaveNote)
+
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(9)
+            .background(
+                AppTheme.accent.opacity(colorScheme == .dark ? 0.14 : 0.09),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+        }
+    }
+
+    private var semanticBanner: some View {
+        let count = semanticMatches?.count ?? 0
+        return HStack(spacing: 6) {
+            Image(systemName: count > 0 ? "sparkles" : "questionmark.circle")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(count > 0 ? AppTheme.accent : AppTheme.warning)
+
+            Text(count > 0
+                ? LocalizedString.l(lang, en: "Found \(count) by meaning", zh: "按意思找到 \(count) 条", ja: "意味で \(count) 件", ko: "의미로 \(count)개 찾음")
+                : LocalizedString.l(lang, en: "Nothing matched by meaning either", zh: "按意思也没找到", ja: "意味でも見つかりません", ko: "의미로도 찾지 못함"))
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(AppTheme.textPrimary(colorScheme))
+
+            Spacer(minLength: 2)
+
+            Button {
+                semanticMatches = nil
+                ai.clearSearchState()
+            } label: {
+                Text(LocalizedString.l(lang, en: "Clear", zh: "清除", ja: "解除", ko: "지우기"))
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .buttonStyle(.link)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(
+            (count > 0 ? AppTheme.accent : AppTheme.warning).opacity(0.1),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+
+    /// 每条记录上的「整理」菜单。内容太短就不给——整理一段 8 个字的文本没有意义，
+    /// 反而让人以为按钮坏了。
+    @ViewBuilder
+    private func aiActionMenu(_ entry: ClipboardHistoryEntry) -> some View {
+        if entry.text.count >= 20 {
+            Menu {
+                ForEach(ClipboardAI.Action.allCases) { action in
+                    Button {
+                        Task { await ai.transform(entry.text, action: action) }
+                    } label: {
+                        Label(action.title(lang), systemImage: action.symbol)
+                    }
+                }
+                Divider()
+                Button {
+                    Task { await ai.transform(entry.text, action: .summarize) }
+                } label: {
+                    Label(
+                        LocalizedString.l(lang, en: "Tidy + save to Notes", zh: "整理并存成笔记", ja: "整えてノートへ", ko: "정리 후 노트 저장"),
+                        systemImage: "note.text.badge.plus"
+                    )
+                }
+            } label: {
+                Image(systemName: "sparkles")
+                    .frame(width: 22, height: 20)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 22, height: 20)
+            .foregroundStyle(AppTheme.accent)
+            .disabled(ai.isWorking)
+            .help(LocalizedString.l(lang, en: "Tidy with AI", zh: "让本鱼整理", ja: "AI で整える", ko: "AI로 정리"))
+        }
+    }
+
+    private func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func runSemanticSearch() {
+        let target = query
+        Task {
+            let hits = await ai.findByMeaning(target, in: store.entries)
+            semanticMatches = Set(hits)
+        }
+    }
+
     private func entryCard(_ entry: ClipboardHistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
@@ -248,6 +485,8 @@ struct ClipboardHistoryView: View {
                     .foregroundStyle(AppTheme.textSecondary(colorScheme))
 
                 Spacer(minLength: 4)
+
+                aiActionMenu(entry)
 
                 Button { store.togglePin(id: entry.id) } label: {
                     Image(systemName: entry.isPinned ? "pin.slash" : "pin")
@@ -321,6 +560,33 @@ struct ClipboardHistoryView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+            }
+
+            // 关键词搜不到时，给一条"按意思找"的路——用户多半记得的是内容，
+            // 不是原文里的字面词。
+            if !query.isEmpty, semanticMatches == nil {
+                Button {
+                    runSemanticSearch()
+                } label: {
+                    Label(
+                        ai.isSearching
+                            ? LocalizedString.l(lang, en: "Looking…", zh: "正在找…", ja: "探しています…", ko: "찾는 중…")
+                            : LocalizedString.l(lang, en: "Let the whale search by meaning", zh: "让本鱼按意思找找", ja: "AI に意味で探させる", ko: "AI에게 의미로 찾기"),
+                        systemImage: "sparkles"
+                    )
+                    .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(ai.isSearching)
+
+                if let error = ai.searchError {
+                    Text(error)
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(AppTheme.critical)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 230)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
