@@ -132,6 +132,33 @@ function now() {
 
 不想要了：设置 → 通用 → 桌宠 → 关掉。
 
+### 她是怎么画出来的
+
+用的是角色立绘（`CoolRun/Assets.xcassets/PetWhale.imageset/pet-whale.png`），
+动效全部由 SwiftUI 合成：呼吸（纵向 0.994↔1.012 拉伸，锚点在脚底）、摇摆
+（±1.5°）、地面影子（跟着呼吸缩放）、悬停放大 4%、思考时冒气泡。
+
+没有用 Live2D，原因很实际：Live2D 要 `.moc3` 模型 + 贴图 + 物理参数，从一张
+PNG 手工绑骨骼是几天的工作量，而 Q 版立绘的呼吸摇摆已经有「活着」的感觉。
+BongoCat 那种 Rust + Live2D 的方案可以借鉴渲染层，但要先有模型文件。
+
+换角色很简单：把新的 PNG 抠图（透明背景）覆盖 `pet-whale.png`，尺寸比例保持
+约 355×393 即可，代码不用动。抠图用 macOS 自带的 Vision：
+
+```swift
+let request = VNGenerateForegroundInstanceMaskRequest()
+```
+
+### 想要更进一步的动画
+
+如果以后有了 Live2D 模型，或者拿到了同一角色的多张表情/动作图，可以：
+
+1. 多张表情图 → 按状态切换（思考/说话/睡觉），`WhalePetView` 里换 `Image` 即可
+2. 序列帧 → 把 PNG 序列放进 imageset，用 `TimelineView` 逐帧播放
+3. Live2D → 引入 Cubism SDK，工作量约一周
+
+现在的方案是「一张图 + 合成动效」，性价比最高的一档。
+
 ## 7. 两个版本
 
 | | Lite | Full |

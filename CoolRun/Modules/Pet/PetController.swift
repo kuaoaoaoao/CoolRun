@@ -15,7 +15,7 @@ final class PetController {
     private var dragStart: NSPoint?
     private var hostingView: NSHostingView<PetRootView>?
 
-    private let size = NSSize(width: 168, height: 168)
+    private let size = NSSize(width: 168, height: 190)
     private let defaults = UserDefaults.standard
 
     private(set) var isVisible = false
