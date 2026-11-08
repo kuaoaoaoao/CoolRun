@@ -45,6 +45,24 @@ struct MenuBarMonitorView: View {
         VStack(spacing: 0) {
             ModuleNavigationRail(selection: $viewMode, todayAttention: todayAttention) {
                 Button {
+                    QuickSearchController.shared.show()
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                        .frame(width: 28, height: 28)
+                }
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help(LocalizedString.l(
+                    settings.language,
+                    en: "Search everything (⌥⌘K)",
+                    zh: "搜索全部（⌥⌘K）",
+                    ja: "すべて検索（⌥⌘K）",
+                    ko: "전체 검색 (⌥⌘K)"
+                ))
+
+                Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                         pinState.isPinned.toggle()
                     }

@@ -43,6 +43,9 @@ private struct NotesArchive: Codable {
 final class NotesStore {
     static let shared = NotesStore(fileURL: GoldDataStorage.fileURL(named: "notes.json"))
 
+    /// 外部（比如统一搜索）要求「打开这条笔记」时写进来，`NotesView` 消费后清空。
+    var pendingOpenNoteID: UUID?
+
     private(set) var groups: [NoteGroupRecord] = []
     private(set) var notes: [NoteRecord] = []
 

@@ -47,6 +47,14 @@ struct NotesView: View {
                 }
             }
         }
+        .onChange(of: store.pendingOpenNoteID) { _, id in
+            // 统一搜索选中了某条笔记：直接把编辑器打开，不要求用户再找一遍。
+            guard let id, let note = store.notes.first(where: { $0.id == id }) else { return }
+            selectedFilter = .all
+            query = ""
+            editorContext = NoteEditorContext(note: note, initialGroupID: note.groupID)
+            store.pendingOpenNoteID = nil
+        }
         .sheet(item: $editorContext) { context in
             NoteEditorView(store: store, note: context.note, initialGroupID: context.initialGroupID)
         }

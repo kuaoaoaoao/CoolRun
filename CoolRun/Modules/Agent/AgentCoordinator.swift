@@ -210,6 +210,9 @@ final class AgentCoordinator {
     }
 
     /// 直接执行一个工具，不经过模型。用于 `/tool` 和工具浏览器。
+    /// 外部（搜索面板、场景卡）要求把一段话填进输入框，`AgentChatView` 消费后清空。
+    var draft: String?
+
     func runToolDirectly(name: String, arguments: JSONValue) {
         guard !isRunning else { return }
         guard !name.isEmpty else {

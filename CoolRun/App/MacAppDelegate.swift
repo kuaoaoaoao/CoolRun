@@ -37,6 +37,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
         // ⌥⌘A 随时唤出 Agent 面板。
         AgentQuickAccess.shared.start()
+        QuickSearchController.shared.start()
 
         // 桌面上的鲸鱼娘。设置里关掉就不再出现。
         if UserDefaults.standard.object(forKey: "pet.enabled") as? Bool != false {

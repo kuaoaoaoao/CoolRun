@@ -27,6 +27,16 @@ struct AgentChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: coordinator.draft) { _, draft in
+            // 搜索面板选了「需要补一句话」的场景卡：把提示词放进输入框，光标停在末尾。
+            guard let draft else { return }
+            inputText = draft
+            coordinator.draft = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                inputFocused = true
+            }
+        }
         .onAppear {
             AgentTools.registerAll()
             AgentActionTools.registerAll()
