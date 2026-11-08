@@ -98,9 +98,44 @@ final class MorningBriefStore {
             language: language
         )
 
-        brief = built
-        saveCache(built)
+        let merged = Self.mergingPatrol(built)
+        brief = merged
+        saveCache(merged)
         scheduleDaily()
+    }
+
+    /// 后台体检发现了问题，就把它顶到简报第一行——不然得等用户自己点进诊断。
+    private static func mergingPatrol(_ brief: MorningBrief) -> MorningBrief {
+        guard let finding = DiagnosticsPatrol.shared.findings.first else { return brief }
+        let tone: MorningBriefLine.Tone
+        switch finding.severity {
+        case .critical: tone = .critical
+        case .warning: tone = .warning
+        case .notice: tone = .attention
+        case .healthy, .unavailable: tone = .normal
+        }
+        // 体检说过的，就别在下面再说一遍。
+        var base = brief.lines
+        switch finding.id {
+        case "storage": base.removeAll { $0.id == "system-storage" }
+        case "memory": base.removeAll { $0.id == "system-memory" }
+        default: break
+        }
+        let line = MorningBriefLine(
+            id: "patrol",
+            icon: "stethoscope",
+            title: finding.title,
+            detail: "去看看",
+            tone: tone,
+            destination: .diagnostics
+        )
+        return MorningBrief(
+            day: brief.day,
+            greeting: brief.greeting,
+            lines: Array(([line] + base).prefix(4)),
+            generatedAt: brief.generatedAt,
+            summary: brief.summary
+        )
     }
 
     // MARK: 模型润色

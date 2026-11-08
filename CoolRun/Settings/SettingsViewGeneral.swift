@@ -160,6 +160,8 @@ extension SettingsView {
                 }
             }
 
+            DiagnosticsPatrolSettingsCard()
+
             MorningBriefSettingsCard()
 
             SettingsCard(
@@ -277,5 +279,61 @@ struct MorningBriefSettingsCard: View {
                 store.minute = components.minute ?? 30
             }
         }
+    }
+}
+
+/// 后台体检的开关与最近一次结果。
+struct DiagnosticsPatrolSettingsCard: View {
+
+    @State private var patrol = DiagnosticsPatrol.shared
+
+    var body: some View {
+        SettingsCard(
+            icon: "stethoscope",
+            title: "后台体检",
+            description: "每隔几小时自己看一眼磁盘、内存、睡眠和网络，真有问题才通知你，一天最多一条。"
+        ) {
+            VStack(spacing: 0) {
+                MonitorToggleRow(
+                    icon: "heart.text.square.fill",
+                    title: "自动检查",
+                    isOn: Binding(
+                        get: { patrol.isEnabled },
+                        set: { patrol.isEnabled = $0 }
+                    )
+                )
+
+                if patrol.isEnabled {
+                    Divider().opacity(0.4)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: patrol.isRunning ? "arrow.triangle.2.circlepath" : "clock")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(statusText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("现在检查") {
+                            Task { await patrol.runNow() }
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 11))
+                        .disabled(patrol.isRunning)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+    }
+
+    private var statusText: String {
+        if patrol.isRunning { return "正在检查…" }
+        guard let last = patrol.lastRunAt else { return "还没检查过" }
+        let stamp = last.formatted(date: .omitted, time: .shortened)
+        if let first = patrol.findings.first {
+            return "\(stamp) 检查过 · \(first.title)"
+        }
+        return "\(stamp) 检查过 · 一切正常"
     }
 }

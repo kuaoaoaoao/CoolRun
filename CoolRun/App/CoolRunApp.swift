@@ -48,6 +48,7 @@ struct CoolRunApp: App {
         PluginManager.shared.loadAll()
         AgentActionTools.registerAll()
         MorningBriefStore.shared.scheduleDaily()
+        DiagnosticsPatrol.shared.start()
         AgentCoordinator.shared.prewarm()
         let projectToken = RuntimeConfiguration.postHogProjectToken
         if projectToken.isEmpty {
