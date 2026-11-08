@@ -167,7 +167,7 @@ extension SettingsView {
             SettingsCard(
                 icon: "fish.fill",
                 title: "桌宠",
-                description: "在桌面放一只鲸鱼娘。双击她可以打开 Agent，按住拖动换位置，右键可以隐藏。"
+                description: "在桌面放一只鲸鱼娘。点一下逗她，双击打开 Agent，按住可以拖着走、甩出去她会飞一会儿。她在干活时会冒气泡告诉你进行到哪一步。"
             ) {
                 VStack(spacing: 0) {
                     MonitorToggleRow(
@@ -175,6 +175,25 @@ extension SettingsView {
                         title: "显示桌宠",
                         isOn: $petEnabled
                     )
+                    Divider().padding(.horizontal, 14)
+                    HStack(spacing: 10) {
+                        Text("大小")
+                            .font(.system(size: 12))
+                        Spacer(minLength: 8)
+                        Picker("大小", selection: Binding(
+                            get: { PetController.shared.scale },
+                            set: { PetController.shared.setScale($0) }
+                        )) {
+                            Text("小").tag(CGFloat(0.8))
+                            Text("中").tag(CGFloat(1.0))
+                            Text("大").tag(CGFloat(1.25))
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 156)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                 }
                 .onChange(of: petEnabled) { _, enabled in
                     if enabled {
