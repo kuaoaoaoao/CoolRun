@@ -32,7 +32,16 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+
         UNUserNotificationCenter.current().delegate = self
+
+        // ⌥⌘A 随时唤出 Agent 面板。
+        AgentQuickAccess.shared.start()
+
+        // 桌面上的鲸鱼娘。设置里关掉就不再出现。
+        if UserDefaults.standard.object(forKey: "pet.enabled") as? Bool != false {
+            PetController.shared.show()
+        }
 
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.statusItem = statusItem
@@ -122,6 +131,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         observeSettingsWindowLifecycle()
         observeNavigationRequests()
         observeSettingsChanges()
+        observeScrollAppearance()
         viewModel.start()
         ClipboardHistoryStore.shared.startMonitoring()
         ClipboardQuickPasteController.shared.start()
@@ -135,6 +145,56 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
         // 注册崩溃收集器
         CrashReporter.shared.install()
+    }
+
+    /// 系统滚动条在「始终显示」设置下是 15pt 宽的 legacy 样式，在窄面板里显得笨重。
+    /// 窗口出现时把内部滚动视图统一切成浮层细条：不占布局宽度，滚动时才浮现。
+    private func observeScrollAppearance() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowDidBecomeKey(_:)),
+            name: NSWindow.didBecomeKeyNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRefreshScrollerStyleNotification),
+            name: .coolRunRefreshScrollerStyle,
+            object: nil
+        )
+    }
+
+    @objc private func handleRefreshScrollerStyleNotification() {
+        DispatchQueue.main.async {
+            guard let window = self.popover.contentViewController?.view.window ?? NSApp.keyWindow else {
+                return
+            }
+            Self.applyThinScrollerStyle(in: window)
+        }
+    }
+
+    @objc private func handleWindowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        // 等这一轮布局提交完，确保 SwiftUI 新建的 NSScrollView 已进入视图树
+        DispatchQueue.main.async {
+            Self.applyThinScrollerStyle(in: window)
+        }
+    }
+
+    private static func applyThinScrollerStyle(in window: NSWindow) {
+        guard let contentView = window.contentView else { return }
+        styleScrollViews(in: contentView)
+    }
+
+    private static func styleScrollViews(in view: NSView) {
+        if let scrollView = view as? NSScrollView {
+            scrollView.scrollerStyle = .overlay
+            scrollView.verticalScroller?.controlSize = .small
+            scrollView.horizontalScroller?.controlSize = .small
+        }
+        for subview in view.subviews {
+            styleScrollViews(in: subview)
+        }
     }
 
     private func observeNavigationRequests() {

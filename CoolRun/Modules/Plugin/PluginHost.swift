@@ -1,0 +1,175 @@
+import AppKit
+import Foundation
+import JavaScriptCore
+import UserNotifications
+
+// MARK: - 插件执行环境
+
+/// 用系统自带的 JavaScriptCore 跑插件，不引入任何第三方依赖，也不增加包体积。
+///
+/// 每次调用工具都新建一个 `JSContext`，在后台线程里跑完就丢。插件很小，
+/// 这点开销可以接受，换来的是不用维护常驻 JS 运行时、也不会因为某个插件
+/// 的死循环拖垮主线程。
+enum PluginHost {
+    nonisolated static func callTool(
+        manifest: PluginManifest,
+        spec: PluginToolSpec,
+        arguments: JSONValue,
+        root: URL
+    ) async -> ToolResult {
+        await Task.detached(priority: .userInitiated) {
+            run(manifest: manifest, spec: spec, arguments: arguments, root: root)
+        }.value
+    }
+
+    // MARK: 同步执行
+
+    private nonisolated static func run(
+        manifest: PluginManifest,
+        spec: PluginToolSpec,
+        arguments: JSONValue,
+        root: URL
+    ) -> ToolResult {
+        let scriptURL = root.appendingPathComponent(manifest.mainScript)
+        guard let script = try? String(contentsOf: scriptURL, encoding: .utf8) else {
+            return .failure("插件脚本读不到：\(manifest.mainScript)")
+        }
+
+        guard let context = JSContext() else {
+            return .failure("无法创建 JavaScript 运行时")
+        }
+
+        var jsError: String?
+        context.exceptionHandler = { _, exception in
+            jsError = exception?.toString() ?? "未知脚本错误"
+        }
+
+        installAPI(in: context, manifest: manifest, root: root)
+
+        context.evaluateScript(script)
+        if let jsError {
+            return .failure("插件脚本报错：\(jsError)")
+        }
+
+        let argsJSON = arguments.compactJSONString()
+        let call = "\(spec.handler)(\(argsJSON))"
+        guard let value = context.evaluateScript(call) else {
+            return .failure("插件没有返回结果")
+        }
+        if let jsError {
+            return .failure("插件执行失败：\(jsError)")
+        }
+        if value.isUndefined || value.isNull {
+            return .text("插件执行完成，没有返回值")
+        }
+
+        return .text(value.toString() ?? "")
+    }
+
+    // MARK: 注入 coolrun API
+
+    private nonisolated static func installAPI(in context: JSContext, manifest: PluginManifest, root: URL) {
+        guard let coolrun = JSValue(newObjectIn: context) else { return }
+
+        // log(msg)
+        let logBlock: @convention(block) (String) -> Void = { message in
+            NSLog("[plugin:%@] %@", manifest.id, message)
+        }
+        coolrun.setObject(unsafeBitCast(logBlock, to: AnyObject.self), forKeyedSubscript: "log")
+
+        // storage.get / storage.set —— 存在插件目录下的 data.json
+        let dataURL = root.appendingPathComponent("data.json")
+        let storageBlock: @convention(block) (String) -> String = { key in
+            guard let data = try? Data(contentsOf: dataURL),
+                  let map = try? JSONDecoder().decode([String: String].self, from: data)
+            else {
+                return ""
+            }
+            return map[key] ?? ""
+        }
+        let storeBlock: @convention(block) (String, String) -> Void = { key, value in
+            var map: [String: String] = [:]
+            if let data = try? Data(contentsOf: dataURL),
+               let existing = try? JSONDecoder().decode([String: String].self, from: data) {
+                map = existing
+            }
+            map[key] = value
+            if let data = try? JSONEncoder().encode(map) {
+                try? data.write(to: dataURL, options: .atomic)
+            }
+        }
+        let storage = JSValue(newObjectIn: context)
+        storage?.setObject(unsafeBitCast(storageBlock, to: AnyObject.self), forKeyedSubscript: "get")
+        storage?.setObject(unsafeBitCast(storeBlock, to: AnyObject.self), forKeyedSubscript: "set")
+        coolrun.setObject(storage, forKeyedSubscript: "storage")
+
+        // 联网：同步阻塞，跑在后台线程，不卡 UI。
+        if manifest.permissions.contains(.network) {
+            let getBlock: @convention(block) (String) -> String = { urlString in
+                httpGetSync(urlString)
+            }
+            coolrun.setObject(unsafeBitCast(getBlock, to: AnyObject.self), forKeyedSubscript: "httpGet")
+        }
+
+        // 通知 / 剪贴板：投递到主线程，不阻塞脚本。
+        if manifest.permissions.contains(.notify) {
+            let notifyBlock: @convention(block) (String, String) -> Void = { title, body in
+                Task { @MainActor in
+                    let content = UNMutableNotificationContent()
+                    content.title = title
+                    content.body = body
+                    let request = UNNotificationRequest(
+                        identifier: "plugin.\(UUID().uuidString)",
+                        content: content,
+                        trigger: nil
+                    )
+                    try? await UNUserNotificationCenter.current().add(request)
+                }
+            }
+            coolrun.setObject(unsafeBitCast(notifyBlock, to: AnyObject.self), forKeyedSubscript: "notify")
+        }
+
+        if manifest.permissions.contains(.clipboard) {
+            let clipboardBlock: @convention(block) (String) -> Void = { text in
+                Task { @MainActor in
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(text, forType: .string)
+                }
+            }
+            coolrun.setObject(unsafeBitCast(clipboardBlock, to: AnyObject.self), forKeyedSubscript: "copy")
+        }
+
+        context.setObject(coolrun, forKeyedSubscript: "coolrun" as NSString)
+    }
+
+    // MARK: 同步 HTTP
+
+    private nonisolated static func httpGetSync(_ urlString: String) -> String {
+        guard let url = URL(string: urlString), let scheme = url.scheme,
+              scheme == "http" || scheme == "https"
+        else {
+            return ""
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.setValue("CoolRun-Plugin", forHTTPHeaderField: "User-Agent")
+
+        let semaphore = DispatchSemaphore(value: 0)
+        final class Box: @unchecked Sendable {
+            var text = ""
+        }
+        let box = Box()
+
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            if let data, let text = String(data: data, encoding: .utf8) {
+                box.text = text
+            }
+            semaphore.signal()
+        }.resume()
+
+        _ = semaphore.wait(timeout: .now() + 12)
+        return box.text
+    }
+}

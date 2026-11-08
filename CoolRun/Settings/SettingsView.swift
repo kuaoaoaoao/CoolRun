@@ -16,6 +16,7 @@ struct SettingsView: View {
     // 系统通知权限被拒时在到价提醒开关下提示，避免用户以为开了就能收到
     @State var notificationPermissionDenied = false
     @AppStorage(ClipboardQuickPasteController.enabledDefaultsKey) var quickPasteEnabled = false
+    @AppStorage("pet.enabled") var petEnabled = true
     @State var quickPasteAccessibilityGranted = AXIsProcessTrusted()
 
     var body: some View {
@@ -44,6 +45,8 @@ struct SettingsView: View {
                             englishContent
                         case .ai:
                             aiContent
+                        case .plugins:
+                            pluginsContent
                         case .data:
                             dataContent
                         case .about:

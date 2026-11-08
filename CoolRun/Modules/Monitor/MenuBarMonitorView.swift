@@ -131,6 +131,10 @@ struct MenuBarMonitorView: View {
             // viewMode 切换时先重置测量值，让新模块自然布局后再测量
             measuredContentSize = .zero
             onViewModeChange?(newValue, newValue.panelContentSize)
+            // 新模块会重建 NSScrollView，等布局完成后重新应用浮层细滚动条
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NotificationCenter.default.post(name: .coolRunRefreshScrollerStyle, object: nil)
+            }
         }
         .onAppear {
             // 首次展示时把真实画布尺寸同步给 popover

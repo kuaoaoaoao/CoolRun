@@ -16,16 +16,20 @@ struct CollapsibleSection<Header: View, Content: View>: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
     private let disclosure = MonitorSectionDisclosure.shared
 
     private var isExpanded: Bool { disclosure.isExpanded(sectionKey) }
 
+    /// 表头 hover 用强调色的淡色底，替代原来展开后整块的灰色底板。
+    private var accentTint: Color {
+        healthColor ?? AppTheme.accent
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                    disclosure.toggle(sectionKey)
-                }
+                disclosure.toggle(sectionKey)
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
@@ -41,16 +45,18 @@ struct CollapsibleSection<Header: View, Content: View>: View {
                         .foregroundStyle(AppTheme.textPrimary(colorScheme))
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
-                        .layoutPriority(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(2)
 
                     Spacer(minLength: 4)
 
+                    // 右侧详情让位给标题：空间不足时截断这里，而不是把标题压没。
                     header()
-                        .layoutPriority(2)
+                        .layoutPriority(1)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(AppTheme.textSecondary(colorScheme).opacity(0.6))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme).opacity(0.55))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .padding(.horizontal, 10)
@@ -59,6 +65,15 @@ struct CollapsibleSection<Header: View, Content: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accentTint.opacity(isHovering ? (colorScheme == .dark ? 0.09 : 0.06) : 0))
+            }
+            .onHover { hovering in
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.12)) {
+                    isHovering = hovering
+                }
+            }
             .accessibilityValue(value)
             .accessibilityHint(
                 isExpanded
@@ -67,20 +82,22 @@ struct CollapsibleSection<Header: View, Content: View>: View {
             )
 
             if isExpanded {
-                VStack(spacing: 2) {
-                    content()
+                VStack(spacing: 0) {
+                    Separator()
+                        .padding(.top, 1)
+
+                    VStack(spacing: 2) {
+                        content()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 6)
+                    .padding(.bottom, 8)
                 }
-                .padding(.horizontal, 10)
-                .padding(.top, 1)
-                .padding(.bottom, 8)
-                .background(
-                    colorScheme == .dark
-                        ? Color.white.opacity(0.025)
-                        : Color.black.opacity(0.018)
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
+        // 统一的隐式动画：只做高度与透明度过渡，不再让内容从顶部平移进来。
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: isExpanded)
     }
 }
 

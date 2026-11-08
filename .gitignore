@@ -38,6 +38,7 @@ CoolRun 2026-*/
 *.xcuserstate
 DerivedData/
 build/
+.build/
 *.app
 *.dSYM
 *.dSYM.zip

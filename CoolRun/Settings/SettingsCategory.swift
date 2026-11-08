@@ -9,6 +9,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case menubar = "menubar"
     case english = "english"
     case ai = "ai"
+    case plugins = "plugins"
     case data = "data"
     case about = "about"
 
@@ -22,6 +23,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .menubar: return LocalizedString.l(lang, en: "Menu Bar", zh: "菜单栏", ja: "メニュー", ko: "메뉴 막대")
         case .english: return LocalizedString.l(lang, en: "English", zh: "英语", ja: "英語", ko: "영어")
         case .ai: return LocalizedString.l(lang, en: "AI Assistant", zh: "AI 助手", ja: "AI アシスタント", ko: "AI 도우미")
+        case .plugins: return LocalizedString.l(lang, en: "Plugins", zh: "插件", ja: "プラグイン", ko: "플러그인")
         case .data: return LocalizedString.l(lang, en: "Data", zh: "数据", ja: "データ", ko: "데이터")
         case .about: return LocalizedString.l(lang, en: "About", zh: "关于", ja: "情報", ko: "정보")
         }
@@ -41,6 +43,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
             return LocalizedString.l(lang, en: "Voice, content and study goals", zh: "语音、内容与学习目标", ja: "音声、教材、学習目標", ko: "음성, 콘텐츠 및 학습 목표")
         case .ai:
             return LocalizedString.l(lang, en: "Model provider and API key", zh: "模型服务商与 API Key", ja: "モデルプロバイダとAPIキー", ko: "모델 제공자 및 API 키")
+        case .plugins:
+            return LocalizedString.l(lang, en: "Install local plugins and manage what they can touch", zh: "本地安装插件，管理它们能用什么", ja: "ローカルプラグインの管理", ko: "로컬 플러그인 관리")
         case .data:
             return LocalizedString.l(lang, en: "Backup, restore and updates", zh: "备份、恢复与更新", ja: "バックアップ、復元、更新", ko: "백업, 복원 및 업데이트")
         case .about:
@@ -56,6 +60,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .menubar: return "menubar.rectangle"
         case .english: return "character.book.closed"
         case .ai: return "brain.head.profile"
+        case .plugins: return "puzzlepiece.extension"
         case .data: return "icloud.and.arrow.down"
         case .about: return "info.circle"
         }

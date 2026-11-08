@@ -107,8 +107,7 @@ final class InterfaceRenderTests: XCTestCase {
             temperature: settings.showTemperature,
             processes: settings.showProcesses
         )
-        let defaults = UserDefaults.standard
-        let previousExpanded = defaults.object(forKey: "monitor_process_list_expanded")
+        let previousProcessesExpanded = MonitorSectionDisclosure.shared.isExpanded(.processes)
 
         settings.showCPU = false
         settings.showMemory = false
@@ -118,7 +117,7 @@ final class InterfaceRenderTests: XCTestCase {
         settings.showUptime = false
         settings.showTemperature = false
         settings.showProcesses = true
-        defaults.set(true, forKey: "monitor_process_list_expanded")
+        MonitorSectionDisclosure.shared.setExpanded(true, for: .processes)
 
         defer {
             settings.showCPU = previousModules.cpu
@@ -129,11 +128,7 @@ final class InterfaceRenderTests: XCTestCase {
             settings.showUptime = previousModules.uptime
             settings.showTemperature = previousModules.temperature
             settings.showProcesses = previousModules.processes
-            if let previousExpanded {
-                defaults.set(previousExpanded, forKey: "monitor_process_list_expanded")
-            } else {
-                defaults.removeObject(forKey: "monitor_process_list_expanded")
-            }
+            MonitorSectionDisclosure.shared.setExpanded(previousProcessesExpanded, for: .processes)
         }
 
         let snapshot = SystemSnapshot(

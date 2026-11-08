@@ -8,20 +8,19 @@ import Observation
 struct ProcessSection: View {
     let metrics: ProcessListMetrics
     @State private var sortKey: SortKey = .cpu
-    @State private var isExpanded = false
+    /// 每次点“显示更多”多显示几行，避免一次性撑高整张卡片。
+    @State private var extraRows = 0
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var settings = AppSettings.shared
-    private let disclosure = MonitorSectionDisclosure.shared
 
     private enum SortKey {
         case cpu
         case memory
     }
 
-    private var collapsedCount: Int { 5 }
-    private var expandedCount: Int { 15 }
-
-    private var showsList: Bool { disclosure.isExpanded(.processes) }
+    private var collapsedCount: Int { 4 }
+    private var maxVisibleCount: Int { 12 }
+    private var rowStep: Int { 4 }
 
     var body: some View {
         CollapsibleSection(
@@ -30,11 +29,18 @@ struct ProcessSection: View {
             title: LocalizedString.monitor("processes", lang: settings.language),
             value: subtitleText
         ) {
-            Text(subtitleText)
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            // 宽度不够时依次退化成更短的文案，而不是把「82.4%」截成「82....」
+            ViewThatFits(in: .horizontal) {
+                Text(subtitleText)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(countAndTopNameText)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(countText)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(AppTheme.textSecondary(colorScheme))
+            .lineLimit(1)
         } content: {
             if displayedProcesses.isEmpty {
                 Label(
@@ -46,12 +52,9 @@ struct ProcessSection: View {
                 .padding(.vertical, 4)
             } else {
                 HStack(spacing: 6) {
-                    Label(
-                        LocalizedString.monitor("sort_by", lang: settings.language),
-                        systemImage: "arrow.up.arrow.down"
-                    )
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    Text(LocalizedString.monitor("sort_by", lang: settings.language))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AppTheme.textSecondary(colorScheme).opacity(0.85))
 
                     Spacer()
                     sortToggle
@@ -69,18 +72,22 @@ struct ProcessSection: View {
 
                 if metrics.processes.count > collapsedCount {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded.toggle()
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            if canRevealMore {
+                                extraRows += rowStep
+                            } else {
+                                extraRows = 0
+                            }
                         }
                     } label: {
                         HStack(spacing: 3) {
                             Text(
-                                isExpanded
-                                    ? LocalizedString.monitor("show_less", lang: settings.language)
-                                    : LocalizedString.monitor("show_more", lang: settings.language)
+                                canRevealMore
+                                    ? LocalizedString.monitor("show_more", lang: settings.language)
+                                    : LocalizedString.monitor("show_less", lang: settings.language)
                             )
                             Image(systemName: "chevron.down")
-                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                                .rotationEffect(.degrees(canRevealMore ? 0 : 180))
                         }
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
@@ -94,17 +101,32 @@ struct ProcessSection: View {
         }
     }
 
-    /// 副标题：进程总数；收起时附带 CPU 占用最高的进程概览
+    /// 副标题：进程总数 + CPU 占用最高的进程。
+    /// 展开前后保持同一段文案，避免点击时表头文字跳动。
     private var subtitleText: String {
         guard metrics.totalCount > 0 else {
             return LocalizedString.monitor("process_waiting", lang: settings.language)
         }
+        guard let top = topProcess else { return countText }
+        return "\(countText) · \(top.name) \(top.cpuUsage.percentText)"
+    }
 
-        var text = "\(metrics.totalCount) \(LocalizedString.monitor("process_count_unit", lang: settings.language))"
-        if !showsList, let top = metrics.processes.max(by: { $0.cpuUsage < $1.cpuUsage }), top.cpuUsage > 0 {
-            text += " · \(top.name) \(top.cpuUsage.percentText)"
+    private var countAndTopNameText: String {
+        guard metrics.totalCount > 0, let top = topProcess else { return countText }
+        return "\(countText) · \(top.name)"
+    }
+
+    private var countText: String {
+        guard metrics.totalCount > 0 else {
+            return LocalizedString.monitor("process_waiting", lang: settings.language)
         }
-        return text
+        return "\(metrics.totalCount) \(LocalizedString.monitor("process_count_unit", lang: settings.language))"
+    }
+
+    private var topProcess: ProcessMetrics? {
+        guard let top = metrics.processes.max(by: { $0.cpuUsage < $1.cpuUsage }),
+              top.cpuUsage > 0 else { return nil }
+        return top
     }
 
     private var sortToggle: some View {
@@ -152,17 +174,38 @@ struct ProcessSection: View {
         .buttonStyle(.plain)
     }
 
+    /// 按「分桶值 + 名称」排序：数值在同一档内时顺序稳定，
+    /// 避免每秒采样都能让行位置来回跳动。
     private var sortedProcesses: [ProcessMetrics] {
         switch sortKey {
         case .cpu:
-            metrics.processes.sorted { $0.cpuUsage > $1.cpuUsage }
+            metrics.processes.sorted { lhs, rhs in
+                let left = (lhs.cpuUsage * 100).rounded()
+                let right = (rhs.cpuUsage * 100).rounded()
+                if left != right { return left > right }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
         case .memory:
-            metrics.processes.sorted { $0.memoryBytes > $1.memoryBytes }
+            metrics.processes.sorted { lhs, rhs in
+                let left = (Double(lhs.memoryBytes) / 1_048_576).rounded()
+                let right = (Double(rhs.memoryBytes) / 1_048_576).rounded()
+                if left != right { return left > right }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
         }
     }
 
+    private var visibleLimit: Int {
+        min(sortedProcesses.count, collapsedCount + extraRows)
+    }
+
+    /// 是否还有更多进程可以展开（且未达到上限）
+    private var canRevealMore: Bool {
+        visibleLimit < min(sortedProcesses.count, maxVisibleCount)
+    }
+
     private var displayedProcesses: [ProcessMetrics] {
-        Array(sortedProcesses.prefix(isExpanded ? expandedCount : collapsedCount))
+        Array(sortedProcesses.prefix(visibleLimit))
     }
 
     private func barFraction(for process: ProcessMetrics) -> Double {
@@ -190,7 +233,7 @@ struct ProcessRow: View {
         HStack(spacing: 8) {
             ProcessIcon(process: process)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text(process.name)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -240,7 +283,7 @@ struct ProcessRow: View {
             .frame(width: 72, alignment: .trailing)
         }
         .padding(.horizontal, 5)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isHovering ? AppTheme.elevatedSurface(colorScheme) : Color.clear)

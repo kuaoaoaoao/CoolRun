@@ -161,6 +161,27 @@ extension SettingsView {
             }
 
             SettingsCard(
+                icon: "fish.fill",
+                title: "桌宠",
+                description: "在桌面放一只鲸鱼娘。双击她可以打开 Agent，按住拖动换位置，右键可以隐藏。"
+            ) {
+                VStack(spacing: 0) {
+                    MonitorToggleRow(
+                        icon: "fish.fill",
+                        title: "显示桌宠",
+                        isOn: $petEnabled
+                    )
+                }
+                .onChange(of: petEnabled) { _, enabled in
+                    if enabled {
+                        PetController.shared.show()
+                    } else {
+                        PetController.shared.hide()
+                    }
+                }
+            }
+
+            SettingsCard(
                 icon: "hand.raised.fill",
                 title: LocalizedString.settings("privacy"),
                 description: LocalizedString.settings("privacy_desc")

@@ -15,7 +15,7 @@ struct SystemHistoryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) { disclosure.toggle(.history) }
+                disclosure.toggle(.history)
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -43,30 +43,34 @@ struct SystemHistoryCard: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                if recent.isEmpty {
-                    Text(LocalizedString.l(settings.language, en: "History appears after the first five-minute sample.", zh: "首次运行约 5 分钟后开始显示历史记录。", ja: "最初の5分サンプル後に表示されます。", ko: "첫 5분 샘플 후 기록이 표시됩니다."))
+                VStack(alignment: .leading, spacing: 7) {
+                    if recent.isEmpty {
+                        Text(LocalizedString.l(settings.language, en: "History appears after the first five-minute sample.", zh: "首次运行约 5 分钟后开始显示历史记录。", ja: "最初の5分サンプル後に表示されます。", ko: "첫 5분 샘플 후 기록이 표시됩니다."))
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.textSecondary(colorScheme))
+                    } else {
+                        historyTrends
+                    }
+
+                    Divider()
+
+                    if store.anomalies.isEmpty {
+                        Label(
+                            LocalizedString.l(settings.language, en: "No recent anomalies", zh: "最近没有记录到异常", ja: "最近の異常はありません", ko: "최근 이상 없음"),
+                            systemImage: "checkmark.circle.fill"
+                        )
                         .font(.caption2)
-                        .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                } else {
-                    historyTrends
-                }
-
-                Divider()
-
-                if store.anomalies.isEmpty {
-                    Label(
-                        LocalizedString.l(settings.language, en: "No recent anomalies", zh: "最近没有记录到异常", ja: "最近の異常はありません", ko: "최근 이상 없음"),
-                        systemImage: "checkmark.circle.fill"
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.healthy)
-                } else {
-                    ForEach(store.anomalies.prefix(3)) { anomaly in
-                        anomalyRow(anomaly)
+                        .foregroundStyle(AppTheme.healthy)
+                    } else {
+                        ForEach(store.anomalies.prefix(3)) { anomaly in
+                            anomalyRow(anomaly)
+                        }
                     }
                 }
+                .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.22), value: isExpanded)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background {

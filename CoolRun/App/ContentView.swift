@@ -65,23 +65,17 @@ enum ViewMode: String, CaseIterable, Sendable {
     /// 面板外边距，需与 `MenuBarMonitorView` 的 `.padding(panelOuterInset)` 保持一致。
     static let panelOuterInset: CGFloat = 8
 
+    /// 所有模块共用的面板宽度（不含外边距）。
+    /// 宽度在全模块间保持一致，切换标签时窗口不会左右跳动。
+    static let panelContentWidth: CGFloat = 384
+
+    /// 所有模块共用的面板高度（不含外边距）。
+    /// 高度固定后切换模块窗口尺寸完全不变；内容超出的模块在内部滚动。
+    static let panelContentHeight: CGFloat = 600
+
     /// 各模块在菜单栏面板中的内容尺寸（不含外边距）。
-    /// 信息密度高的模块（黄金、诊断）需要更大的画布，否则只能靠层层折叠塞进去。
     var panelContentSize: CGSize {
-        switch self {
-        case .today, .monitor:
-            return CGSize(width: 320, height: 512)
-        case .gold:
-            return CGSize(width: 384, height: 616)
-        case .calendar:
-            return CGSize(width: 344, height: 560)
-        case .english, .codex, .notes, .clipboard:
-            return CGSize(width: 340, height: 540)
-        case .diagnostics:
-            return CGSize(width: 376, height: 596)
-        case .aiAssistant:
-            return CGSize(width: 356, height: 560)
-        }
+        CGSize(width: Self.panelContentWidth, height: Self.panelContentHeight)
     }
 
     /// `NSPopover.contentSize` 需要的总尺寸（内容 + 两侧外边距）。
@@ -182,6 +176,10 @@ struct ContentView: View {
         .onDisappear { viewModel.stop() }
         .onChange(of: viewMode) { _, newValue in
             AppSettings.shared.lastViewModeRaw = newValue.rawValue
+            // 切换模块后滚动视图会重建，重新应用浮层细滚动条
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NotificationCenter.default.post(name: .coolRunRefreshScrollerStyle, object: nil)
+            }
         }
         // 当前模块在设置中被隐藏时，自动切到第一个可见模块
         .onChange(of: settings.visibleTabRaws) { _, _ in

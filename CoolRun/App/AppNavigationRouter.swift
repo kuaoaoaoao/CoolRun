@@ -22,6 +22,8 @@ struct CoolRunNavigationRequest: Equatable, Sendable {
 extension Notification.Name {
     static let coolRunPresentNavigationRequest = Notification.Name("CoolRunPresentNavigationRequest")
     static let coolRunRefreshGold = Notification.Name("CoolRunRefreshGold")
+    /// 模块切换后重新应用浮层细滚动条样式（新版滚动视图会回落到系统默认样式）。
+    static let coolRunRefreshScrollerStyle = Notification.Name("CoolRunRefreshScrollerStyle")
 }
 
 @MainActor

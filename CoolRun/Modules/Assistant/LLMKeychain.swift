@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 // MARK: - Provider 类型
 
@@ -61,63 +60,24 @@ enum LLMProviderKind: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-// MARK: - Keychain 存储
+// MARK: - 凭据存储
 
-/// LLM 凭据统一存放在 Keychain，不写入 UserDefaults。
-/// 使用 kSecClassGenericPassword，服务名固定为 bundle identifier。
+/// LLM 凭据存在本地加密文件里（见 `SecretStore`），不用钥匙串。
+///
+/// 原因：这个 app 是 ad-hoc 签名分发的，每次重新打包签名都会变，钥匙串 ACL
+/// 认不出新签名，读取时会弹「想要使用您存储在钥匙串中的机密信息」并要求输入
+/// 密码 —— 每装一次新版就弹一次，太烦。改成加密文件后不再有任何弹窗。
 enum LLMKeychain {
-    private static var service: String {
-        Bundle.main.bundleIdentifier ?? "com.coolrun.app"
-    }
-
     @discardableResult
     static func save(_ value: String, account: String) -> Bool {
-        guard let data = value.data(using: .utf8) else { return false }
-
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-
-        // 先删除旧值，避免 duplicate item
-        SecItemDelete(baseQuery as CFDictionary)
-
-        guard !value.isEmpty else { return true }
-
-        var addQuery = baseQuery
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-
-        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+        SecretStore.save(value, account: account)
     }
 
     static func load(account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data,
-              let text = String(data: data, encoding: .utf8),
-              !text.isEmpty
-        else {
-            return nil
-        }
-        return text
+        SecretStore.load(account)
     }
 
     static func delete(account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        SecretStore.delete(account)
     }
 }
