@@ -214,7 +214,11 @@ enum TodaySummaryBuilder {
         let title = severity >= .warning
             ? LocalizedString.l(language, en: "Mac needs attention", zh: "Mac 状态需要关注", ja: "Mac の状態を確認", ko: "Mac 상태 확인 필요")
             : LocalizedString.l(language, en: "Mac is running normally", zh: "Mac 运行正常", ja: "Mac は正常です", ko: "Mac 정상 작동 중")
-        let detail = "CPU \(Int(snapshot.cpu.usage * 100))% · MEM \(Int(snapshot.memory.usage * 100))%"
+        var detail = "CPU \(Int(snapshot.cpu.usage * 100))% · MEM \(Int(snapshot.memory.usage * 100))%"
+        // 磁盘紧张时才提一句，否则这行只讲 CPU 和内存，磁盘再满也看不出来。
+        if snapshot.storage.usage >= 0.85 {
+            detail += " · DISK \(Int(snapshot.storage.usage * 100))%"
+        }
         return TodaySummaryItem(
             id: "system",
             kind: .system,
@@ -284,7 +288,7 @@ struct TodayOverviewView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                headline
+                MorningBriefCard()
 
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     Button {
@@ -298,30 +302,6 @@ struct TodayOverviewView: View {
             .padding(2)
         }
         .scrollIndicators(.hidden)
-    }
-
-    private var headline: some View {
-        let urgentCount = items.filter { $0.severity >= .warning }.count
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(LocalizedString.l(settings.language, en: "Today", zh: "今天", ja: "今日", ko: "오늘"))
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                Spacer()
-                Text(Date.now.formatted(.dateTime.month().day().weekday(.abbreviated)))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(AppTheme.textSecondary(colorScheme))
-            }
-            Text(urgentCount == 0
-                ? LocalizedString.l(settings.language, en: "Nothing urgent. Keep your rhythm.", zh: "暂无紧急事项，按自己的节奏继续。", ja: "急ぎの項目はありません。", ko: "긴급한 항목이 없습니다.")
-                : LocalizedString.l(settings.language, en: "\(urgentCount) items need attention.", zh: "有 \(urgentCount) 项需要关注。", ja: "\(urgentCount)件の確認事項があります。", ko: "\(urgentCount)개 항목을 확인하세요."))
-                .font(.caption)
-                .foregroundStyle(urgentCount == 0 ? AppTheme.textSecondary(colorScheme) : AppTheme.warning)
-        }
-        .padding(12)
-        .background(AppTheme.gold.opacity(colorScheme == .dark ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(alignment: .leading) {
-            Capsule().fill(AppTheme.gold).frame(width: 3).padding(.vertical, 9)
-        }
     }
 
     private func timelineRow(_ item: TodaySummaryItem, isLast: Bool) -> some View {

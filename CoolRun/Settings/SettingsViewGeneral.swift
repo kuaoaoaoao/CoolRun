@@ -160,6 +160,8 @@ extension SettingsView {
                 }
             }
 
+            MorningBriefSettingsCard()
+
             SettingsCard(
                 icon: "fish.fill",
                 title: "桌宠",
@@ -212,6 +214,68 @@ extension SettingsView {
         // 从系统设置授权回来后刷新权限状态，否则警告行不会消失
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             quickPasteAccessibilityGranted = AXIsProcessTrusted()
+        }
+    }
+}
+
+
+// MARK: - 每日简报设置
+
+struct MorningBriefSettingsCard: View {
+
+    @State private var store = MorningBriefStore.shared
+    @State private var time: Date
+
+    init() {
+        let store = MorningBriefStore.shared
+        var components = DateComponents()
+        components.hour = store.hour
+        components.minute = store.minute
+        let base = Calendar.current.date(from: components) ?? Date()
+        _time = State(initialValue: base)
+    }
+
+    var body: some View {
+        SettingsCard(
+            icon: "sunrise.fill",
+            title: "每日简报",
+            description: "每天在指定时间提醒你看一眼今天的情况。简报本身离线生成，不联网也能用。"
+        ) {
+            VStack(spacing: 0) {
+                MonitorToggleRow(
+                    icon: "bell.badge.fill",
+                    title: "每天提醒",
+                    isOn: Binding(
+                        get: { store.isEnabled },
+                        set: { store.isEnabled = $0 }
+                    )
+                )
+
+                if store.isEnabled {
+                    Divider().opacity(0.4)
+
+                    HStack {
+                        Text("提醒时间")
+                            .font(.system(size: 12))
+                        Spacer()
+                        DatePicker(
+                            "",
+                            selection: $time,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .labelsHidden()
+                        .datePickerStyle(.stepperField)
+                        .frame(width: 92)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+            .onChange(of: time) { _, value in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: value)
+                store.hour = components.hour ?? 8
+                store.minute = components.minute ?? 30
+            }
         }
     }
 }
