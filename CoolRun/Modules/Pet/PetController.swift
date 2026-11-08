@@ -316,11 +316,8 @@ struct PetRootView: View {
                         PetController.shared.endDrag()
                     }
             )
-            .onTapGesture(count: 2) {
-                PetController.shared.openAgent()
-            }
-            .onTapGesture(count: 1) {
-                PetController.shared.speak()
+            .onTapGesture {
+                handleTap()
             }
             .contextMenu {
                 Button("打开 Agent") { PetController.shared.openAgent() }
@@ -348,4 +345,24 @@ struct PetRootView: View {
     }
 
     @State private var dragging = false
+    @State private var tapCount = 0
+    @State private var tapTask: Task<Void, Never>?
+
+    /// 单击和双击要自己分：两个 `onTapGesture` 叠在一起时，单击会先吃掉事件，
+    /// 双击永远等不到第二下。所以先等 260ms，看到第二下就当双击。
+    private func handleTap() {
+        tapCount += 1
+        tapTask?.cancel()
+        let count = tapCount
+        tapTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled else { return }
+            tapCount = 0
+            if count >= 2 {
+                PetController.shared.openAgent()
+            } else {
+                PetController.shared.speak()
+            }
+        }
+    }
 }
