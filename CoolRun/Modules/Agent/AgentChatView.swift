@@ -72,9 +72,18 @@ struct AgentChatView: View {
             Spacer()
 
             if !settings.isConfigured {
-                Text("未配置模型")
-                    .font(.system(size: 10, weight: .medium))
+                Button {
+                    showsSettings = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 8))
+                        Text("未配置模型 · 去设置")
+                            .font(.system(size: 10, weight: .medium))
+                    }
                     .foregroundStyle(AppTheme.warning)
+                }
+                .buttonStyle(.plain)
             }
 
             Button {
@@ -254,22 +263,54 @@ struct AgentChatView: View {
     // MARK: - 错误条
 
     private func errorBar(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(AppTheme.critical)
-            Text(message)
-                .font(.system(size: 11))
-                .foregroundStyle(AppTheme.critical)
-                .lineLimit(3)
-            Spacer()
-            Button {
-                coordinator.errorMessage = nil
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AppTheme.critical)
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(AppTheme.critical)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 2)
+                Button {
+                    coordinator.errorMessage = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+
+            // 报错不该只让人知道"错了"。配置问题给去设置的入口，其他问题给重试——
+            // 这两件事覆盖了九成的失败场景。
+            HStack(spacing: 6) {
+                if AgentCoordinator.looksLikeConfigurationProblem(message) {
+                    Button {
+                        showsSettings = true
+                    } label: {
+                        Text("去设置")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                }
+
+                if coordinator.hasUserMessage {
+                    Button {
+                        coordinator.retryLast()
+                    } label: {
+                        Label("重试", systemImage: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(coordinator.isRunning)
+                }
+
+                Spacer(minLength: 0)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

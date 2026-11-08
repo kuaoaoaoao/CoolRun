@@ -57,6 +57,9 @@ final class AgentCoordinator {
     /// 已落盘的对话，供界面渲染。
     var messages: [AgentHistoryEntry] { history.entries }
 
+    /// 有没有可以重试的提问。
+    var hasUserMessage: Bool { history.entries.contains { $0.role == .user } }
+
     // MARK: - 发送
 
     func send(_ prompt: String) {
@@ -78,6 +81,38 @@ final class AgentCoordinator {
         let engineHistory = history.messages()
         history.append(role: .user, content: trimmed)
 
+        start(prompt: trimmed, history: engineHistory, config: config)
+    }
+
+    /// 重试上一次提问：失败之后最需要的动作——改完设置、换个模型，不用重新打字。
+    /// 不会重复记一条用户消息，只把模型再跑一遍。
+    func retryLast() {
+        guard !isRunning else { return }
+        guard let lastUser = history.entries.last(where: { $0.role == .user }) else { return }
+
+        let config: AgentRunConfig
+        do {
+            config = try AgentSettings.shared.makeConfig()
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        AgentTools.registerAll()
+        AgentActionTools.registerAll()
+
+        var priorHistory = history.messages()
+        if let last = priorHistory.last, last.role == .user { priorHistory.removeLast() }
+        start(prompt: lastUser.content, history: priorHistory, config: config)
+    }
+
+    /// 这条错误是配置问题吗？UI 用它决定给「去设置」还是「重试」。
+    nonisolated static func looksLikeConfigurationProblem(_ message: String) -> Bool {
+        let markers = ["API Key", "接口地址", "模型名称", "未配置", "设置", "credential", "401", "403"]
+        return markers.contains { message.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func start(prompt: String, history engineHistory: [AgentMessage], config: AgentRunConfig) {
         isRunning = true
         streamingText = ""
         reasoningText = ""
@@ -90,7 +125,7 @@ final class AgentCoordinator {
         runTask = Task { [weak self] in
             var collected = ""
             do {
-                for try await event in engine.run(prompt: trimmed, history: engineHistory, config: config) {
+                for try await event in engine.run(prompt: prompt, history: engineHistory, config: config) {
                     guard let self, !Task.isCancelled else { return }
                     switch event {
                     case .textDelta(let delta):

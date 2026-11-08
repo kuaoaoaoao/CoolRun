@@ -27,10 +27,15 @@ final class ClipboardAIIntegrationTests: XCTestCase {
             )
         }
 
+        // 只有显式打开才跑：常规自检不该因为网络或模型脾气而变红。
+        guard env("AGENT_IT_USE_APP_CONFIG") == "1" else {
+            throw XCTSkip("未设置 AGENT_IT_BASEURL / AGENT_IT_KEY（或 AGENT_IT_USE_APP_CONFIG=1），跳过剪贴板 AI 联调")
+        }
+
         let settings = AgentSettings.shared
         let saved = settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !saved.isEmpty, !settings.baseURL.isEmpty, !settings.model.isEmpty else {
-            throw XCTSkip("没有 AGENT_IT_* 环境变量，app 里也没配好模型，跳过剪贴板 AI 联调")
+            throw XCTSkip("AGENT_IT_USE_APP_CONFIG=1，但 app 里没有配好的模型，跳过")
         }
         return try settings.makeConfig()
     }
