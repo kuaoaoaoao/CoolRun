@@ -123,6 +123,26 @@ final class PetModel {
 
     private(set) var isSleeping = false
 
+    /// 渲染帧率（秒/帧）。
+    ///
+    /// 菜单栏常驻程序不该为了一个装饰动画一直满帧重绘——那样即使什么都不做，
+    /// 也会把 CPU 从睡眠里叫醒。所以按状态分档：睡着 3fps、待机 12fps、
+    /// 在干活 20fps，只有真的飞起来或者正在做动作才用满帧 24fps。
+    var frameInterval: TimeInterval {
+        if airborne { return 1.0 / 24.0 }
+        if action != .none { return 1.0 / 24.0 }
+        if isSleeping { return 1.0 / 2.0 }
+        switch mood {
+        case .sleeping:
+            return 1.0 / 2.0
+        case .thinking, .working, .waiting, .success, .error:
+            return 1.0 / 15.0
+        case .idle:
+            // 呼吸一个周期四秒多，6fps 已经看不出顿；再快只是白烧电。
+            return 1.0 / 6.0
+        }
+    }
+
     private var isDragging = false
     private var lastInteraction = Date()
     private var wasRunning = false

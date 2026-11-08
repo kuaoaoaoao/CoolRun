@@ -17,18 +17,28 @@ final class SystemSampler {
     private let processSampler = ProcessSampler()
     #endif
 
-    func sample(includeProcesses: Bool = true, mergeProcesses: Bool = true) -> SystemSnapshot {
+    /// - Parameters:
+    ///   - includeStorage: 查询磁盘容量要走 CacheDelete / APFS 卷角色枚举，是这里
+    ///     最贵的一项（系统诊断里能看到 `CacheDeleteVolume.validate`）。菜单栏只在
+    ///     弹出面板时才需要它，常驻轮询一律关掉。
+    ///   - includeSensors: 温度要读 SMC，同样只在面板可见时才值。
+    func sample(
+        includeProcesses: Bool = true,
+        mergeProcesses: Bool = true,
+        includeStorage: Bool = true,
+        includeSensors: Bool = true
+    ) -> SystemSnapshot {
         let now = Date()
         let network = sampleNetwork()
         let uptime = sampleUptime()
-        let temperature = sampleTemperature()
+        let temperature = includeSensors ? sampleTemperature() : TemperatureMetrics()
 
         defer { previousSampleTime = now }
 
         return SystemSnapshot(
             cpu: sampleCPU(),
             memory: sampleMemory(),
-            storage: sampleStorage(),
+            storage: includeStorage ? sampleStorage() : StorageMetrics(),
             battery: sampleBattery(),
             network: network,
             uptime: uptime,

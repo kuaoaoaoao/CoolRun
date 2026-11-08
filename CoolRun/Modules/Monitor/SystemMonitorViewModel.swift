@@ -23,7 +23,20 @@ struct MetricHistory {
 @MainActor
 @Observable
 final class SystemMonitorViewModel {
+    /// 采样范围。菜单栏常驻轮询用 `.light`——只要 CPU/内存/网速这几个便宜的
+    /// Mach 调用；等面板真的弹出来再切 `.full`，把磁盘容量、温度、进程列表补上。
+    ///
+    /// 这么分是因为磁盘容量查询会走 APFS 卷角色枚举，一秒一次能把待机 CPU
+    /// 顶到 5% 以上，而菜单栏根本不需要它。
+    enum Scope {
+        case light
+        case full
+    }
+
     var snapshot = SystemSnapshot()
+
+    /// 面板是否可见。不可见时降级采样，并且不写历史（否则会存进一堆 0）。
+    var scope: Scope = .light
 
     /// 历史数据
     var cpuHistory = MetricHistory()
@@ -59,9 +72,12 @@ final class SystemMonitorViewModel {
     }
 
     func refresh() {
+        let isFull = scope == .full
         snapshot = sampler.sample(
-            includeProcesses: AppSettings.shared.showProcesses,
-            mergeProcesses: AppSettings.shared.mergeProcesses
+            includeProcesses: isFull && AppSettings.shared.showProcesses,
+            mergeProcesses: AppSettings.shared.mergeProcesses,
+            includeStorage: isFull,
+            includeSensors: isFull
         )
 
         // 更新历史数据
@@ -77,6 +93,8 @@ final class SystemMonitorViewModel {
             gpuTempHistory.append(gpuTemp)
         }
 
-        SystemHistoryStore.shared.record(snapshot: snapshot)
+        if isFull {
+            SystemHistoryStore.shared.record(snapshot: snapshot)
+        }
     }
 }

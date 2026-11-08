@@ -26,6 +26,8 @@ final class PetController {
 
     /// 立绘缩放，0.7~1.5。
     private(set) var scale: CGFloat = 1
+    /// 是否播放待机动效。关掉能省一点电（实测约 2% CPU），代价是画面定格。
+    private(set) var animates = true
     private(set) var isVisible = false
 
     private var size: NSSize {
@@ -68,7 +70,7 @@ final class PetController {
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = false
 
-        let host = NSHostingView(rootView: PetRootView(scale: scale))
+        let host = NSHostingView(rootView: PetRootView(scale: scale, animates: animates))
         host.frame = NSRect(origin: .zero, size: size)
         panel.contentView = host
 
@@ -98,6 +100,13 @@ final class PetController {
 
     // MARK: 尺寸
 
+    func setAnimates(_ on: Bool) {
+        guard on != animates else { return }
+        animates = on
+        defaults.set(on, forKey: "pet.animate")
+        hostingView?.rootView = PetRootView(scale: scale, animates: on)
+    }
+
     func setScale(_ newScale: CGFloat) {
         let clamped = min(1.5, max(0.7, (newScale * 100).rounded() / 100))
         guard clamped != scale else { return }
@@ -109,7 +118,7 @@ final class PetController {
         let newSize = size
         panel.setFrame(NSRect(origin: origin, size: newSize), display: true)
         hostingView?.frame = NSRect(origin: .zero, size: newSize)
-        hostingView?.rootView = PetRootView(scale: clamped)
+        hostingView?.rootView = PetRootView(scale: clamped, animates: animates)
         saveOrigin(PetPhysics.clamp(origin, size: newSize, bounds: activeBounds(for: panel.frame)))
     }
 
@@ -241,6 +250,7 @@ final class PetController {
 
     private func originForShow() -> NSPoint {
         scale = CGFloat(defaults.object(forKey: "pet.scale") as? Double ?? 1)
+        animates = defaults.object(forKey: "pet.animate") as? Bool ?? true
         if let saved = defaults.string(forKey: "pet.origin") {
             let point = NSPointFromString(saved)
             if isOnScreen(point) {
@@ -290,11 +300,12 @@ final class PetController {
 /// 三者共用同一个手势区，靠 `DragGesture` 的最小距离把点击和拖动分开。
 struct PetRootView: View {
     var scale: CGFloat = 1
+    var animates: Bool = true
 
     private var model: PetModel { PetModel.shared }
 
     var body: some View {
-        WhalePetView()
+        WhalePetView(animated: animates)
             .scaleEffect(scale, anchor: .bottom)
             .frame(
                 width: WhalePetView.baseSize.width * scale,

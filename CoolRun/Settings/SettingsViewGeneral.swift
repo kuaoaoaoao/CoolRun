@@ -176,6 +176,15 @@ extension SettingsView {
                         isOn: $petEnabled
                     )
                     Divider().padding(.horizontal, 14)
+                    MonitorToggleRow(
+                        icon: "wind",
+                        title: "播放动效",
+                        isOn: Binding(
+                            get: { PetController.shared.animates },
+                            set: { PetController.shared.setAnimates($0) }
+                        )
+                    )
+                    Divider().padding(.horizontal, 14)
                     HStack(spacing: 10) {
                         Text("大小")
                             .font(.system(size: 12))

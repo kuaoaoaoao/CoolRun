@@ -447,6 +447,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         allowsPopoverClose = false
     }
 
+    func popoverWillShow(_ notification: Notification) {
+        guard let shown = notification.object as? NSPopover, shown === popover else { return }
+        // 面板要显示磁盘、温度、进程了，切回完整采样并立刻补一帧，
+        // 免得用户先看到上一轮轻量采样留下的空值。
+        viewModel.scope = .full
+        viewModel.refresh()
+    }
+
     func popoverShouldClose(_ popover: NSPopover) -> Bool {
         guard popover === self.popover else { return true }
         return allowsPopoverClose || !popoverPinState.isPinned
@@ -462,6 +470,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         // NSPopover 会保留 hosting controller；显式停止，避免关闭后仍轮询 AI 接口。
         codexViewModel.stop()
         claudeViewModel.stop()
+        // 面板关了就别再查磁盘容量和 SMC 温度了——这两项是常驻 CPU 的大头。
+        viewModel.scope = .light
 
         if popoverPinState.isPinned {
             setPopoverPinned(false)
