@@ -49,10 +49,10 @@ enum GoldActionVerb: String, Sendable, CaseIterable {
         case .hold:
             LocalizedString.l(
                 language,
-                en: "Signals conflict; keep what you have and wait for a cleaner setup.",
-                zh: "多空信号互相抵消，已有仓位拿着，等更清楚的机会。",
-                ja: "強弱が拮抗。保有分は維持し、明確な機会を待ちます。",
-                ko: "신호가 상충합니다. 보유분은 유지하고 기회를 기다리세요."
+                en: "Signals conflict. No position: buy only near the lower entry edge, in steps. Holding: keep it, exit below the stop.",
+                zh: "多空信号互相抵消。没仓位就等价格回到买入区下沿再分批；已有仓位拿着，跌破止损再走。",
+                ja: "強弱が拮抗。未保有なら買いゾーン下沿で分割、保有中なら損切りまで維持。",
+                ko: "신호가 상충합니다. 미보유 시 매수 구간 하단에서 분할, 보유 중이면 손절까지 유지."
             )
         case .reduce:
             LocalizedString.l(
@@ -267,6 +267,7 @@ enum GoldActionPlanner {
             invalidation: invalidationText(
                 verb: verb,
                 stopLoss: levels.stopLoss,
+                entryHigh: levels.entryHigh,
                 language: language
             ),
             probabilityUp: report?.forecast?.probabilityAboveCurrent,
@@ -546,6 +547,7 @@ enum GoldActionPlanner {
     nonisolated static func invalidationText(
         verb: GoldActionVerb,
         stopLoss: Double,
+        entryHigh: Double? = nil,
         language: AppLanguage
     ) -> String {
         let level = formatted(stopLoss, digits: 2)
@@ -559,12 +561,13 @@ enum GoldActionPlanner {
                 ko: "\(level) 아래로 마감하면 계획 무효. 물타지 말고 이탈."
             )
         case .hold:
+            let upper = entryHigh.map { formatted($0, digits: 2) } ?? level
             return LocalizedString.l(
                 language,
-                en: "Stay out of new positions until price clears the entry zone with volume.",
-                zh: "在价格带量走出这个区间之前，不要开新仓。",
-                ja: "出来高を伴ってレンジを抜けるまで新規は見送り。",
-                ko: "거래량과 함께 구간을 벗어나기 전엔 신규 진입 금지."
+                en: "Re-run this plan if price closes with volume above \(upper) or below \(level).",
+                zh: "收盘价带量站上 \(upper) 或跌破 \(level)，这份计划作废，按新趋势重算。",
+                ja: "\(upper) を上抜け、または \(level) を下抜けて引けたら計画は無効。再計算。",
+                ko: "\(upper) 위 또는 \(level) 아래로 마감하면 계획 무효. 다시 계산."
             )
         case .reduce, .sell:
             return LocalizedString.l(
