@@ -34,6 +34,27 @@ final class ClipClassifierPerformanceTests: XCTestCase {
         }
     }
 
+    /// 真实的剪贴板里会躺着几 MB 的文本（整份日志、整段代码）。
+    /// 分类器曾经对这种文本逐字符扫全文，一次分类要几秒。
+    func testClassifyingHugeEntriesIsFast() {
+        let huge = String(repeating: "这是一行很长的日志内容 abcdefghijklmnopqrstuvwxyz 0123456789\n", count: 40_000)
+        XCTAssertGreaterThan(huge.utf8.count, 2_000_000)
+
+        let start = Date()
+        let kind = ClipClassifier.kind(of: huge)
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertLessThan(elapsed, 0.2, "分类一条 2MB 文本花了 \(elapsed)s")
+        XCTAssertEqual(kind, .long)
+    }
+
+    /// 截断采样不能改变短文本的判定结果。
+    func testSampleKeepsShortTextsIntact() {
+        let short = "https://example.com/a"
+        XCTAssertEqual(ClipClassifier.sample(of: short), short)
+        XCTAssertEqual(ClipClassifier.kind(of: short), .link)
+    }
+
     func testClassifyingTwoHundredEntriesIsFast() {
         let entries = makeEntries()
         let start = Date()

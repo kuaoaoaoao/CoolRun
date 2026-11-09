@@ -49,9 +49,18 @@ struct ClipboardHistoryView: View {
     /// 分类结果必须缓存：它依赖全部历史文本，body 每次失效都重算的话，
     /// 光是分类就能吃掉几十个百分点 CPU。
     private func refreshKinds() {
-        let classified = ClipClassifier.classify(store.entries)
-        kinds = classified
-        kindCounts = ClipClassifier.counts(from: classified)
+        // 增量：同一个 id 的文本不会再变（同样内容重新复制会复用原 id），
+        // 所以只需要给新出现的条目分类。剪贴板每分钟都可能进新条目，
+        // 全量重算等于每次复制都卡一下。
+        var next = kinds
+        let liveIDs = Set(store.entries.map(\.id))
+        next = next.filter { liveIDs.contains($0.key) }
+        for entry in store.entries where next[entry.id] == nil {
+            next[entry.id] = ClipClassifier.kind(of: entry.text)
+        }
+        guard next != kinds else { return }
+        kinds = next
+        kindCounts = ClipClassifier.counts(from: next)
     }
 
     var body: some View {
@@ -88,7 +97,7 @@ struct ClipboardHistoryView: View {
             store.startMonitoring()
             refreshKinds()
         }
-        .onChange(of: store.entries) { _, _ in
+        .onChange(of: store.revision) { _, _ in
             refreshKinds()
         }
         .task {

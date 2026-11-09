@@ -52,19 +52,45 @@ enum ClipKind: String, CaseIterable, Sendable, Identifiable {
 enum ClipClassifier {
     /// 判定顺序有意义：先认最容易认错的（链接里含 `://` 会被误判成代码，
     /// 代码里含数字也不能当数字看），所以链接 → 命令 → 代码 → 数字 → 长文 → 普通。
+    /// 分类只看开头这么多字节。
+    ///
+    /// 剪贴板里经常躺着几 MB 的文本（一整份日志、一整段代码）。按字符遍历全文
+    /// 会让主线程卡上好几秒——`sample` 的调用点就在这里。类型判断靠首行和前
+    /// 几十个字符，看全文既慢又没必要。
+    nonisolated static let sampleByteLimit = 2048
+
+    nonisolated static func sample(of text: String) -> String {
+        let utf8 = text.utf8
+        guard utf8.count > sampleByteLimit else { return text }
+        return String(decoding: utf8.prefix(sampleByteLimit), as: UTF8.self)
+    }
+
     nonisolated static func kind(of text: String) -> ClipKind {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let byteCount = text.utf8.count
+        guard byteCount > 0 else { return .text }
+
+        let sample = sample(of: text)
+        let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .text }
 
-        // 小写只转一次，后面所有匹配都用它。
+        // 小写只转一次，后面所有匹配都用它。样本已经被截断，这里不会再有全文开销。
         let lowered = trimmed.lowercased()
 
         if isLink(trimmed, lowered: lowered) { return .link }
         if isCommand(lowered: lowered) { return .command }
-        if isCode(trimmed, lowered: lowered) { return .code }
-        if isNumberLike(trimmed) { return .number }
-        if trimmed.count > 240 || trimmed.utf8.reduce(0, { $1 == 0x0A ? $0 + 1 : $0 }) > 8 { return .long }
+        if isCode(trimmed, lowered: lowered, byteCount: byteCount) { return .code }
+        if isNumberLike(trimmed, byteCount: byteCount) { return .number }
+        if byteCount > 480 || newlineCount(in: sample) > 8 { return .long }
         return .text
+    }
+
+    private nonisolated static func newlineCount(in text: String) -> Int {
+        var count = 0
+        for byte in text.utf8 where byte == 0x0A {
+            count += 1
+            if count > 8 { return count }
+        }
+        return count
     }
 
     /// 一次扫完，返回 id → 分类。调用方应缓存它，不要在 body 里直接调用。
@@ -133,9 +159,9 @@ enum ClipClassifier {
         "const ", "return ", "=>", "->", "</", "};", ");", "#include", "select ",
     ]
 
-    private nonisolated static func isCode(_ text: String, lowered: String) -> Bool {
+    private nonisolated static func isCode(_ text: String, lowered: String, byteCount: Int) -> Bool {
         // 短文本几乎不可能是代码，先挡掉——这是最常见的一类，省下的时间最多。
-        guard text.count >= 24 else { return false }
+        guard byteCount >= 24 else { return false }
 
         var markerHits = 0
         for marker in codeMarkers where lowered.contains(marker) {
@@ -153,15 +179,18 @@ enum ClipClassifier {
         ".", ",", "+", "-", "%", "$", "¥", "€", "£", ":", "／", "/", " ",
     ]
 
-    private nonisolated static func isNumberLike(_ text: String) -> Bool {
-        guard text.count <= 40 else { return false }
+    private nonisolated static func isNumberLike(_ text: String, byteCount: Int) -> Bool {
+        guard byteCount <= 40 else { return false }
         guard text.contains(where: \.isNumber) else { return false }
         return text.allSatisfy { numberAllowed.contains($0) }
     }
 
+    /// 按字节找换行。`String.firstIndex(where:)` 是逐 Character 走索引，
+    /// 长文本上比按字节扫慢两个数量级。
     private nonisolated static func firstLine(of text: String) -> String {
-        if let newline = text.firstIndex(where: { $0 == "\n" || $0 == "\r" }) {
-            return String(text[..<newline])
+        let utf8 = text.utf8
+        if let newline = utf8.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+            return String(decoding: utf8[..<newline], as: UTF8.self)
         }
         return text
     }

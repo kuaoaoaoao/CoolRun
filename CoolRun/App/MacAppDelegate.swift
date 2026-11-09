@@ -329,6 +329,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         englishLearning.stop()
         GoldPriceStore.shared.flushToDisk()
         ClipboardHistoryStore.shared.stopMonitoring()
+        ClipboardHistoryStore.shared.flushPendingWrites()
         ClipboardQuickPasteController.shared.stop()
         UpdateChecker.shared.stopAutoCheck()
         if let windowCloseObserver {

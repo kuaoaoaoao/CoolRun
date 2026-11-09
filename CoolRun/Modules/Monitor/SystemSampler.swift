@@ -133,17 +133,25 @@ final class SystemSampler {
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
 
+        // 这里刻意用 `.volumeAvailableCapacityKey`，不用
+        // `.volumeAvailableCapacityForImportantUsageKey`。
+        //
+        // 后者问的是「把可清除的数据都清掉之后还剩多少」，系统为了算这个数会去
+        // 枚举可清除空间（CacheDelete / APFS 卷角色）。磁盘接近满的时候反复问，
+        // 等于不停提醒系统「可以回收了」——别的 App 的缓存（比如聊天软件的图片
+        // 缓存）可能在用户毫无操作的情况下被系统回收，而且回收不进废纸篓。
+        // 常驻采样每秒都可能跑，不能带上这个副作用。
         guard
             let values = try? url.resourceValues(forKeys: [
                 .volumeTotalCapacityKey,
-                .volumeAvailableCapacityForImportantUsageKey
+                .volumeAvailableCapacityKey
             ])
         else {
             return StorageMetrics()
         }
 
         let total = UInt64(max(values.volumeTotalCapacity ?? 0, 0))
-        let available = UInt64(max(values.volumeAvailableCapacityForImportantUsage ?? 0, 0))
+        let available = UInt64(max(values.volumeAvailableCapacity ?? 0, 0))
 
         return StorageMetrics(
             used: total > available ? total - available : 0,

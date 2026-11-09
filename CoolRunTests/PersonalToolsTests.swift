@@ -135,6 +135,8 @@ final class PersonalToolsTests: XCTestCase {
         let entryID = try XCTUnwrap(context.store.entries.first?.id)
         context.store.togglePin(id: entryID)
         context.store.setMonitoringEnabled(false)
+        // 落盘在后台队列上，读文件之前要先等它写完。
+        context.store.flushPendingWrites()
 
         let reloaded = ClipboardHistoryStore(
             fileURL: fileContext.fileURL,

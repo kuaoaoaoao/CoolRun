@@ -219,6 +219,32 @@ final class CleanupAdvisor {
 
     // MARK: - 清理
 
+    /// 每一次真正移走东西都留一条记录。
+    ///
+    /// 这不是为了好看：用户发现文件不见了的时候，「本鱼到底动没动过」必须有据可查。
+    /// 追加写 JSONL，坏了也只坏最后一行。
+    nonisolated static var auditFileURL: URL {
+        GoldDataStorage.fileURL(named: "cleanup-audit.jsonl")
+    }
+
+    private nonisolated static func recordAudit(name: String, url: URL, bytes: UInt64) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let escapedName = name.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedPath = url.path.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let line = "{\"time\":\"\(stamp)\",\"name\":\"\(escapedName)\",\"path\":\"\(escapedPath)\",\"bytes\":\(bytes)}\n"
+        guard let data = line.data(using: .utf8) else { return }
+        let fileURL = auditFileURL
+        if let handle = try? FileHandle(forWritingTo: fileURL) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: fileURL, options: .atomic)
+        }
+    }
+
     func clean(_ selected: [Item]) async -> Report {
         var report = Report()
         for item in selected where item.risk != .protected {
@@ -238,6 +264,7 @@ final class CleanupAdvisor {
             case .success:
                 report.trashed.append(name)
                 report.freedBytes &+= size
+                Self.recordAudit(name: name, url: url, bytes: size)
             case .failure(let error):
                 report.failures.append("\(name)：\(error.localizedDescription)")
             }
