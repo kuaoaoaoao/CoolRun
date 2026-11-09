@@ -246,7 +246,9 @@ struct ModuleNavigationRail<Trailing: View>: View {
     }
 
     private func navigationContent(showsSelectionTitle: Bool) -> some View {
-        HStack(spacing: 3) {
+        // 间距 3 → 2、单格 24×32 → 28×34：总宽只多 4pt，但每个图标的
+        // 命中区域大了约三成，菜单栏里手指/触控板都好点。
+        HStack(spacing: 2) {
             ForEach(settings.visibleViewModes, id: \.self) { mode in
                 Button {
                     guard selection != mode else { return }
@@ -278,8 +280,8 @@ struct ModuleNavigationRail<Trailing: View>: View {
                         }
                     }
                     .frame(
-                        minWidth: selection == mode ? (showsSelectionTitle ? 28 : 24) : 24,
-                        minHeight: 32
+                        minWidth: selection == mode ? (showsSelectionTitle ? 32 : 28) : 28,
+                        minHeight: 34
                     )
                     .padding(.horizontal, selection == mode ? (showsSelectionTitle ? 5 : 2) : 0)
                     .foregroundStyle(selection == mode ? AppTheme.accent : AppTheme.textSecondary(colorScheme))
@@ -296,9 +298,9 @@ struct ModuleNavigationRail<Trailing: View>: View {
                                 .fill(AppTheme.accent.opacity(0.07))
                         }
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .rowHitTarget()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle(scale: 0.9, reduceMotion: reduceMotion))
                 .keyboardShortcut(mode.keyboardShortcut, modifiers: .command)
                 .help(mode.displayName)
                 .accessibilityLabel(mode.displayName)

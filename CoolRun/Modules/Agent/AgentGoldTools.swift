@@ -15,6 +15,7 @@ enum AgentGoldTools {
         registerTechnical()
         registerForecast()
         registerStrategy()
+        registerPlan()
         registerPosition()
     }
 
@@ -331,6 +332,72 @@ enum AgentGoldTools {
             }
 
             return .text(JSONValue.object(payload).prettyJSONString())
+        }
+    }
+
+    // MARK: - 明确的买卖计划
+
+    /// 与金价页最上面那张「现在怎么办」卡同一套算法：
+    /// 动作、仓位、买入区/止损/目标、理由、风险、失效条件，全部给出具体数字。
+    private static func registerPlan() {
+        ToolRegistry.shared.register(ToolDescriptor(
+            name: "gold_plan",
+            summary: "给出明确的黄金买卖计划：动作（买入/分批买入/持有观望/减仓/卖出）、建议仓位、买入区间、止损价、目标价、3 条理由、风险与失效条件。用户问「现在该不该买」「买多少」「跌到哪该走」时优先调用它，比 gold_strategy 更直接。",
+            parameters: ToolSchema.object(properties: []),
+            permission: .read
+        )) { _ in
+            let quality = await dailyQuality(days: 365, fallback: .year)
+            guard quality.closes.count >= 20 else {
+                return .failure("有效日线只有 \(quality.closes.count) 天，至少需要 20 天才能给出计划。")
+            }
+            let prices = quality.closes.map(\.close)
+            guard let price = currentPrice(from: records(days: 7)) ?? prices.last, price > 0 else {
+                return .failure("拿不到当前金价，无法生成计划。")
+            }
+            let list = dailyRecords(quality.closes)
+            let snapshot = TechnicalIndicators.buildSnapshot(prices: prices, currentPrice: price)
+            let signal = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot)
+            let report = GoldAdvancedStrategy.analyze(records: list, snapshot: snapshot, signal: signal)
+
+            guard let plan = GoldActionPlanner.plan(
+                currentPrice: price,
+                snapshot: snapshot,
+                signal: signal,
+                report: report,
+                weeklyForecast: nil,
+                language: AppSettings.shared.language
+            ) else {
+                return .failure("计划生成失败，可能是波动率数据异常。")
+            }
+
+            let payload: [String: JSONValue] = [
+                "action": .string(actionLabel(plan.verb)),
+                "action_title": .string(plan.verb.title(AppSettings.shared.language)),
+                "confidence_percent": num(plan.confidence * 100),
+                "suggested_exposure_percent": num(plan.exposurePercent * 100),
+                "current_price": num(price),
+                "entry_low": num(plan.entryLow),
+                "entry_high": num(plan.entryHigh),
+                "stop_loss": num(plan.stopLoss),
+                "target": num(plan.target),
+                "horizon_days": .number(Double(plan.horizonDays)),
+                "reasons": .array(plan.reasons.map { .string($0) }),
+                "risks": .array(plan.risks.map { .string($0) }),
+                "invalidation": .string(plan.invalidation),
+                "probability_up_percent": plan.probabilityUp.map { num($0 * 100) } ?? .null,
+                "disclaimer": .string(disclaimer),
+            ]
+            return .text(JSONValue.object(payload).prettyJSONString())
+        }
+    }
+
+    private static func actionLabel(_ verb: GoldActionVerb) -> String {
+        switch verb {
+        case .buy: return "buy"
+        case .accumulate: return "accumulate"
+        case .hold: return "hold"
+        case .reduce: return "reduce"
+        case .sell: return "sell"
         }
     }
 

@@ -263,6 +263,10 @@ extension GoldWeeklyForecastService {
             }
         }
 
+        // 7.5 把模型分量翻译成人话。之前 reasons 只写数据来源，
+        // 用户看到的就是一张「涨/跌 + 一个价格」的空卡片，等于没解释。
+        reasons.append(contentsOf: Self.componentReasons(draft: draft, language: language))
+
         // 8. 组装 ready 快照（事件信心修正由 applyEventImpact 负责）。
         let forecast = GoldWeeklyForecast(
             direction: draft.direction,
@@ -473,6 +477,76 @@ extension GoldWeeklyForecastService {
             request.currentPriceSource
         ].joined(separator: "|")
     }
+
+    /// 分量 → 人话。阈值取 0.15：低于这个数说明该因子基本没出力，不硬编理由。
+    nonisolated private static func componentReasons(
+        draft: GoldWeeklyForecastDraft,
+        language: AppLanguage
+    ) -> [String] {
+        var result: [String] = []
+        let components = draft.components
+        let threshold = 0.15
+
+        func amount(_ value: Double) -> String {
+            let text = abs(value).formatted(.number.precision(.fractionLength(2)))
+            return value >= 0 ? "+\(text)" : "-\(text)"
+        }
+
+        if abs(components.trend) >= threshold {
+            let up = components.trend > 0
+            result.append(LocalizedString.l(
+                language,
+                en: "Trend \(amount(components.trend)): the recent slope is \(up ? "upward" : "downward").",
+                zh: "趋势项 \(amount(components.trend))，近期斜率\(up ? "向上" : "向下")。",
+                ja: "トレンド \(amount(components.trend))、直近の傾きは\(up ? "上向き" : "下向き")。",
+                ko: "추세 \(amount(components.trend)), 최근 기울기는 \(up ? "상승" : "하락")."
+            ))
+        }
+
+        if abs(components.momentum) >= threshold {
+            let up = components.momentum > 0
+            result.append(LocalizedString.l(
+                language,
+                en: "Momentum \(amount(components.momentum)): \(up ? "buyers still in control" : "sellers still in control").",
+                zh: "动量项 \(amount(components.momentum))，\(up ? "买方还占上风" : "卖方还占上风")。",
+                ja: "モメンタム \(amount(components.momentum))、\(up ? "買い方が優勢" : "売り方が優勢")。",
+                ko: "모멘텀 \(amount(components.momentum)), \(up ? "매수 우위" : "매도 우위")."
+            ))
+        }
+
+        if abs(components.meanReversion) >= threshold {
+            let pullBack = components.meanReversion < 0
+            result.append(LocalizedString.l(
+                language,
+                en: "Mean reversion \(amount(components.meanReversion)): price is \(pullBack ? "stretched above" : "stretched below") its recent average.",
+                zh: "均值回归项 \(amount(components.meanReversion))，价格\(pullBack ? "高于" : "低于")近期均值，有\(pullBack ? "回落" : "修复")压力。",
+                ja: "平均回帰 \(amount(components.meanReversion))、直近平均より\(pullBack ? "上" : "下")に乖離。",
+                ko: "평균 회귀 \(amount(components.meanReversion)), 최근 평균보다 \(pullBack ? "위" : "아래")에 위치."
+            ))
+        }
+
+        if abs(components.bootstrap) >= threshold {
+            let up = components.bootstrap > 0
+            result.append(LocalizedString.l(
+                language,
+                en: "Historical blocks \(amount(components.bootstrap)): similar past weeks leaned \(up ? "up" : "down").",
+                zh: "历史区块项 \(amount(components.bootstrap))，相似的历史周\(up ? "偏涨" : "偏跌")。",
+                ja: "過去ブロック \(amount(components.bootstrap))、類似週は\(up ? "上昇" : "下落")寄り。",
+                ko: "과거 블록 \(amount(components.bootstrap)), 유사 주간은 \(up ? "상승" : "하락") 우위."
+            ))
+        }
+
+        let band = LocalizedString.l(
+            language,
+            en: "Seven-day band: \(draft.p10.formatted(.number.precision(.fractionLength(2))))–\(draft.p90.formatted(.number.precision(.fractionLength(2)))), median \(draft.p50.formatted(.number.precision(.fractionLength(2)))).",
+            zh: "七天区间 \(draft.p10.formatted(.number.precision(.fractionLength(2))))–\(draft.p90.formatted(.number.precision(.fractionLength(2))))，中位 \(draft.p50.formatted(.number.precision(.fractionLength(2))))。",
+            ja: "7日レンジ \(draft.p10.formatted(.number.precision(.fractionLength(2))))–\(draft.p90.formatted(.number.precision(.fractionLength(2))))、中値 \(draft.p50.formatted(.number.precision(.fractionLength(2))))。",
+            ko: "7일 구간 \(draft.p10.formatted(.number.precision(.fractionLength(2))))–\(draft.p90.formatted(.number.precision(.fractionLength(2)))), 중간값 \(draft.p50.formatted(.number.precision(.fractionLength(2))))."
+        )
+        result.append(band)
+
+        return result
+    }
 }
 
 // MARK: - 6 小时缓存与 in-flight 合并
@@ -525,4 +599,6 @@ private actor GoldWeeklyForecastServiceCache {
             createdAt: snapshot.updatedAt
         )
     }
+
+
 }

@@ -5,6 +5,7 @@ struct NotesView: View {
     @State private var store: NotesStore
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var query = ""
     @State private var selectedFilter: NoteGroupFilter = .all
@@ -245,14 +246,14 @@ struct NotesView: View {
                 .padding(.leading, 8)
                 .padding(.vertical, 8)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RowHighlightButtonStyle())
 
             VStack(spacing: 3) {
                 Button { store.togglePin(id: note.id) } label: {
                     Image(systemName: note.isPinned ? "pin.fill" : "pin")
-                        .frame(width: 22, height: 20)
+                        .hitTarget(width: 26, height: 24)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle(scale: 0.86, reduceMotion: reduceMotion))
                 .foregroundStyle(note.isPinned ? AppTheme.accent : AppTheme.textSecondary(colorScheme))
                 .help(note.isPinned
                     ? LocalizedString.l(lang, en: "Unpin", zh: "取消固定", ja: "固定解除", ko: "고정 해제")

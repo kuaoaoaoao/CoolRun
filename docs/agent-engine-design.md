@@ -229,6 +229,7 @@ enum ToolPermission: Int, Comparable {
 | `gold_price_now` | L0 | 当前金价 + 涨跌 + 数据新鲜度 |
 | `gold_history` | L0 | 指定周期 K 线/记录 |
 | `gold_signals` | L0 | 技术指标与交易信号 |
+| `gold_plan` | L0 | 明确动作 + 仓位 + 买入区/止损/目标 + 理由/风险/失效条件 |
 | `gold_portfolio` | L0 | 持仓与盈亏 |
 | `calendar_upcoming` | L0 | 未来 N 天事件/生日/倒计时 |
 | `calendar_lunar` | L0 | 农历、节气、节假日 |

@@ -74,9 +74,10 @@ struct MorningBriefCard: View {
                             .foregroundStyle(detailColor(line.tone))
                             .lineLimit(1)
                     }
+                    .frame(minHeight: 24)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RowHighlightButtonStyle())
                 .disabled(line.destination == nil)
             }
         }

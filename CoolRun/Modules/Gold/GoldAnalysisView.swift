@@ -117,9 +117,9 @@ struct GoldAnalysisView: View {
                                         }
                                 }
                             }
-                            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .rowHitTarget(cornerRadius: 6)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableButtonStyle(scale: 0.96, pressedOpacity: 0.85, reduceMotion: reduceMotion))
                     .accessibilityLabel(tab.title(lang: appSettings.language))
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 }
@@ -139,20 +139,20 @@ struct GoldAnalysisView: View {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.65)
-                        .frame(width: 26, height: 26)
+                        .frame(width: 30, height: 30)
                 } else {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                        .frame(width: 26, height: 26)
+                        .frame(width: 30, height: 30)
                         .background(
                             AppTheme.progressBg(colorScheme).opacity(0.55),
-                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
                         .contentShape(Rectangle())
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableButtonStyle(scale: 0.88, reduceMotion: reduceMotion))
             .disabled(isManualRefreshing)
             .accessibilityLabel(LocalizedString.l(appSettings.language, en: "Refresh now", zh: "立即刷新", ja: "今すぐ更新", ko: "지금 새로고침"))
             .help(LocalizedString.l(appSettings.language, en: "Refresh now", zh: "立即刷新", ja: "今すぐ更新", ko: "지금 새로고침"))
@@ -168,6 +168,11 @@ struct GoldAnalysisView: View {
                 if let statistics = viewModel.statistics {
                     let positionAdvice = makePositionAdvice(currentPrice: statistics.currentPrice)
                     header(statistics: statistics)
+
+                    GoldActionPlanCard(
+                        plan: actionPlan(currentPrice: statistics.currentPrice),
+                        isLoading: viewModel.isWeeklyForecastLoading
+                    )
 
                     if viewModel.isLoading {
                         loadingCard
@@ -266,6 +271,20 @@ struct GoldAnalysisView: View {
         .onDisappear {
             viewModel.cancel()
         }
+    }
+
+    /// 把技术面、策略报告、一周预测三路输入压成一份能执行的计划。
+    /// 只要拿不到当前价就返回 nil，卡片自己会退化成「数据不够」。
+    private func actionPlan(currentPrice: Double) -> GoldActionPlan? {
+        guard let snapshot = viewModel.snapshot else { return nil }
+        return GoldActionPlanner.plan(
+            currentPrice: currentPrice,
+            snapshot: snapshot,
+            signal: viewModel.signal,
+            report: viewModel.advancedReport,
+            weeklyForecast: viewModel.weeklyForecastSnapshot?.forecast,
+            language: appSettings.language
+        )
     }
 
     @ViewBuilder

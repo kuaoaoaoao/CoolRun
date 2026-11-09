@@ -50,10 +50,9 @@ struct MenuBarMonitorView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
-                        .frame(width: 28, height: 28)
+                        .hitTarget(width: 30, height: 34)
                 }
-                .contentShape(Rectangle())
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle(scale: 0.88, reduceMotion: reduceMotion))
                 .help(LocalizedString.l(
                     settings.language,
                     en: "Search everything (⌥⌘K)",
@@ -71,14 +70,14 @@ struct MenuBarMonitorView: View {
                     Image(systemName: pinState.isPinned ? "pin.fill" : "pin")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(pinState.isPinned ? AppTheme.warning : AppTheme.textSecondary(colorScheme))
-                        .frame(width: 28, height: 28)
+                        .hitTarget(width: 30, height: 34)
                         .background {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(pinState.isPinned ? AppTheme.warning.opacity(0.14) : Color.clear)
+                                .padding(2)
                         }
                 }
-                .contentShape(Rectangle())
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle(scale: 0.88, reduceMotion: reduceMotion))
                 .help(pinState.isPinned ? LocalizedString.common("unpin_popover") : LocalizedString.common("pin_popover"))
             }
             .padding(.bottom, 8)

@@ -467,7 +467,7 @@ struct ClipboardHistoryView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 22, height: 20)
+            .hitTarget(width: 26, height: 22)
             .foregroundStyle(AppTheme.accent)
             .disabled(ai.isWorking)
             .help(LocalizedString.l(lang, en: "Tidy with AI", zh: "让本鱼整理", ja: "AI で整える", ko: "AI로 정리"))
@@ -500,7 +500,7 @@ struct ClipboardHistoryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RowHighlightButtonStyle(cornerRadius: 6))
 
             HStack(spacing: 5) {
                 if entry.isPinned {
