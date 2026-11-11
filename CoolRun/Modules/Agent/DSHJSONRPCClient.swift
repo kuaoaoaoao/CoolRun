@@ -14,6 +14,8 @@ final class DSHJSONRPCClient {
 
     private var process: Process?
     private var stdinHandle: FileHandle?
+    private var stdoutHandle: FileHandle?
+    private var stderrHandle: FileHandle?
     private var stdoutBuffer = Data()
     private var nextID = 1
     private var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
@@ -42,29 +44,35 @@ final class DSHJSONRPCClient {
         process.standardOutput = stdout
         process.standardError = stderr
 
-        // Pipe 回调在别的线程，不能直接抓 @MainActor 的 self。
-        // 用 unowned 捕获：stop() 会把 readabilityHandler 清空，生命周期由本对象管。
-        stdout.fileHandleForReading.readabilityHandler = { [unowned self] handle in
+        // Pipe 回调在别的线程，不能直接抓 @MainActor 的 self，所以甩回主线程。
+        // 这里必须用 weak 而不是 unowned：进程退出/被 terminate 的回调是**异步**送达的，
+        // 完全可能在本对象已经释放之后才跑到（换引擎、重建客户端都会先丢引用）。
+        // 用 unowned 会在那一刻 abort（swift_unownedRetainStrong），直接把 App 崩掉。
+        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            Task { @MainActor in self.ingest(chunk) }
+            guard !chunk.isEmpty, let owner = self else { return }
+            Task { @MainActor in owner.ingest(chunk) }
         }
 
-        stderr.fileHandleForReading.readabilityHandler = { [unowned self] handle in
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty, let text = String(data: chunk, encoding: .utf8) else { return }
-            Task { @MainActor in self.logStderr(text) }
+            guard !chunk.isEmpty, let text = String(data: chunk, encoding: .utf8),
+                  let owner = self else { return }
+            Task { @MainActor in owner.logStderr(text) }
         }
 
-        process.terminationHandler = { [unowned self] finished in
+        process.terminationHandler = { [weak self] finished in
             let status = finished.terminationStatus
-            Task { @MainActor in self.handleTermination(code: status) }
+            guard let owner = self else { return }
+            Task { @MainActor in owner.handleTermination(code: status) }
         }
 
         try process.run()
 
         self.process = process
         self.stdinHandle = stdin.fileHandleForWriting
+        self.stdoutHandle = stdout.fileHandleForReading
+        self.stderrHandle = stderr.fileHandleForReading
         self.isRunning = true
     }
 
@@ -78,21 +86,44 @@ final class DSHJSONRPCClient {
     }
 
     func stop() {
-        guard let process, process.isRunning else {
-            isRunning = false
-            return
+        let proc = process
+        let wasRunning = proc?.isRunning ?? false
+        isRunning = false
+        process = nil
+
+        // 先礼后兵：发一条 shutdown，再关 stdin（dsh 见到 EOF 会自己退出），
+        // 1 秒后还赖着就强杀。id 用 0，不挂 continuation，回包直接丢弃。
+        if wasRunning, let stdinHandle {
+            var line = Data(#"{"jsonrpc":"2.0","id":0,"method":"shutdown"}"#.utf8)
+            line.append(0x0A)
+            try? stdinHandle.write(contentsOf: line)
         }
-        // 先礼后兵：shutdown 请求，1 秒后强杀。
-        Task { @MainActor in
-            _ = try? await request(method: "shutdown", params: nil, timeout: .seconds(1))
+        stdinHandle?.closeFile()
+        stdinHandle = nil
+
+        // 回调必须在放引用之前摘掉：进程退出的回调可能晚到几秒，
+        // 那时本对象可能已经没了（换引擎会立刻丢引用）。
+        stdoutHandle?.readabilityHandler = nil
+        stderrHandle?.readabilityHandler = nil
+        proc?.terminationHandler = nil
+        stdoutHandle = nil
+        stderrHandle = nil
+
+        // 等待中的请求不能就这么悬着：统一回错，界面上才能给出提示。
+        let error = ServerError(code: -1, message: "DSH 运行时已关闭")
+        for (_, continuation) in pending {
+            continuation.resume(throwing: error)
         }
+        pending.removeAll()
+        notificationContinuation?.finish()
+
+        guard wasRunning, let proc else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
-            if process.isRunning {
-                process.terminate()
+            if proc.isRunning {
+                proc.terminate()
             }
         }
-        isRunning = false
     }
 
     private func handleTermination(code: Int32) {

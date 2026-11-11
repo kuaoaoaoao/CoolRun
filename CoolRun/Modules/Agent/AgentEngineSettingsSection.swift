@@ -16,12 +16,11 @@ struct AgentEngineSettingsSection: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            Text(settings.engineKind == .native
-                 ? "内置引擎，体积为零，覆盖绝大多数场景。"
-                 : "DSH 引擎，能力更强，需要一份运行时。")
+            Text(engineSummary)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if settings.engineKind == .dsh {
                 runtimeStatus
@@ -98,6 +97,16 @@ struct AgentEngineSettingsSection: View {
         }
         .padding(10)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// 两个引擎用的是同一套工具、同一套模型配置，区别只在「谁在跑」。
+    private var engineSummary: String {
+        switch settings.engineKind {
+        case .native:
+            return "App 自带，不额外占空间；对话和工具都跑在本进程里，回得快，改配置立刻生效。日常用这个就够。"
+        case .dsh:
+            return "另起一个进程跑 DeepSeek Harness（独立的一份 Node 运行时，不是你在用的那个 DeepSeek Harness.app）。多步任务、技能、子代理更强，代价是首次启动要等 2–3 秒、常驻内存更高。"
+        }
     }
 
     private var statusText: String {

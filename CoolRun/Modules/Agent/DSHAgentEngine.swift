@@ -116,20 +116,27 @@ final class DSHAgentEngine: AgentEngine {
         environment["COOLRUN_LLM_MODEL"] = config.model
 
         let client = DSHJSONRPCClient()
-        try client.start(
-            executable: runtime.executable,
-            arguments: ["--profile", "sdk-minimal", "--patch", patchURL.path],
-            environment: environment
-        )
+        do {
+            try client.start(
+                executable: runtime.executable,
+                arguments: ["--profile", "sdk-minimal", "--patch", patchURL.path],
+                environment: environment
+            )
 
-        _ = try await client.request(
-            method: "initialize",
-            params: .object([
-                "cwd": .string(FileManager.default.homeDirectoryForCurrentUser.path),
-                "provider": .string("coolrun"),
-                "model": .string(config.model),
-            ])
-        )
+            _ = try await client.request(
+                method: "initialize",
+                params: .object([
+                    "cwd": .string(FileManager.default.homeDirectoryForCurrentUser.path),
+                    "provider": .string("coolrun"),
+                    "model": .string(config.model),
+                ])
+            )
+        } catch {
+            // 初始化失败时这个 client 还没挂到 self 上，不主动收尸就会留下一个
+            // 孤儿 dsh 进程（几百 MB 常驻），下次换引擎时它的退出回调还要来砸门。
+            client.stop()
+            throw error
+        }
 
         self.client = client
         self.configSignature = signature

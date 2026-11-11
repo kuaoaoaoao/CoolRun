@@ -61,10 +61,11 @@ final class AgentRuntimeInstaller {
             let release = try await Self.latestRelease()
 
             state = .downloading(progress: 0)
-            let downloaded = try await Self.download(release) { [unowned self] progress in
+            let downloaded = try await Self.download(release) { [weak self] progress in
+                guard let owner = self else { return }
                 Task { @MainActor in
-                    guard case .downloading = self.state else { return }
-                    self.state = .downloading(progress: progress)
+                    guard case .downloading = owner.state else { return }
+                    owner.state = .downloading(progress: progress)
                 }
             }
 
