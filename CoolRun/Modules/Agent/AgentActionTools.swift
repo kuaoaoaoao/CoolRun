@@ -15,6 +15,37 @@ enum AgentActionTools {
         registerNotes()
         registerReminders()
         registerScreenshot()
+        registerPet()
+    }
+
+    // MARK: - L1 桌宠
+
+    private static func registerPet() {
+        ToolRegistry.shared.register(
+            ToolDescriptor(
+                name: "pet_wander",
+                summary: "让桌面上的小鲸鱼走动一段距离。适合汇报进度、引起用户注意，或者用户明确让她动一动时使用。",
+                parameters: ToolSchema.object(
+                    properties: [
+                        ("direction", ToolSchema.string("往哪边走", enumValues: ["left", "right"])),
+                        ("distance", ToolSchema.integer("走多远（点），默认 160", minimum: 20, maximum: 600)),
+                    ],
+                    required: ["direction"]
+                ),
+                permission: .reversible
+            )
+        ) { arguments in
+            guard let raw = arguments["direction"]?.stringValue, raw == "left" || raw == "right" else {
+                return .failure("direction 只能是 left 或 right")
+            }
+            guard PetController.shared.isVisible else {
+                return .failure("桌宠现在是关着的，先在设置里打开「显示桌宠」")
+            }
+            let distance = min(600, max(20, arguments["distance"]?.intValue ?? 160))
+            PetModel.shared.touch()
+            PetController.shared.glide(dx: raw == "right" ? CGFloat(distance) : CGFloat(-distance))
+            return .text("让她往\(raw == "right" ? "右" : "左")走了 \(distance) 点。")
+        }
     }
 
     // MARK: - L1 切面板

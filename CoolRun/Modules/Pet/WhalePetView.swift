@@ -1,6 +1,26 @@
 import AppKit
 import SwiftUI
 
+// MARK: - 斜切
+
+/// 只在真需要斜切时才套 `projectionEffect`。
+///
+/// 零斜切也套的话，SwiftUI 每帧都要为这个视图建一次离屏合成层——
+/// 而桌宠窗口是常驻的、每秒重绘十几帧，这笔开销会一直挂着。
+private struct PetShearModifier: ViewModifier {
+    let shear: CGFloat
+
+    func body(content: Content) -> some View {
+        if abs(shear) < 0.02 {
+            content
+        } else {
+            content.projectionEffect(
+                ProjectionTransform(CGAffineTransform(a: 1, b: 0, c: shear, d: 1, tx: 0, ty: 0))
+            )
+        }
+    }
+}
+
 // MARK: - 桌宠
 
 /// 桌面上的鲸鱼娘。
@@ -10,6 +30,12 @@ import SwiftUI
 /// 动作一律「记时间戳 + 按当前时刻算」，不用 `withAnimation`：
 /// 这里是 `TimelineView` 逐帧重绘的，隐式动画在这种结构下不会插值，
 /// 而按时钟算反而更稳——掉帧也只是跳一下，不会失控。
+///
+/// 姿态分成三层叠起来：
+/// 1. 心情（呼吸、摇摆、倾斜）——一直有；
+/// 2. 动作（`PetAction` 的关键帧）——做的时候有；
+/// 3. 落地压扁——被扔下来的时候有。
+/// 三层各算各的，最后加成一个 `PetPose` 交给身体。
 struct WhalePetView: View {
     /// 立绘原始尺寸下画布多大。外框会按缩放放大。
     nonisolated static let baseSize = CGSize(width: 168, height: 190)
@@ -18,44 +44,59 @@ struct WhalePetView: View {
     var animated: Bool = true
 
     private let model = PetModel.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var hover = false
 
     var body: some View {
-        // 关掉动效时把间隔拉到一分钟：画面定格，只剩点击和拖动。
-        TimelineView(.periodic(from: .now, by: animated ? model.frameInterval : 60)) { context in
-            stage(at: context.date.timeIntervalSinceReferenceDate)
-        }
-        .frame(width: Self.baseSize.width, height: Self.baseSize.height)
-        .contentShape(Rectangle())
-        .onHover { inside in
-            hover = inside
-            (inside ? NSCursor.openHand : NSCursor.arrow).set()
-        }
+        // 重绘由 `PetModel.frameTick` 驱动，不用 `TimelineView`。
+        //
+        // `TimelineView(.periodic(by:))` 的间隔只是「最早什么时候可以更新」，
+        // 视图一有变化 SwiftUI 照样按屏幕刷新率重算（这台 120Hz）；换成
+        // `.animation(minimumInterval:)` 更糟——它本来就跟着显示刷新率跑，
+        // 实测功耗从 8% 涨到 12%。自己按 `frameInterval` 发 tick 才能真压到 6fps。
+        //
+        // 读一下 `frameTick` 是为了让 SwiftUI 订阅这个属性：它一变，body 重算。
+        let _ = model.frameTick
+
+        return stage(at: model.frameTime, scheme: colorScheme)
+            .frame(width: Self.baseSize.width, height: Self.baseSize.height)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                hover = inside
+                (inside ? NSCursor.openHand : NSCursor.arrow).set()
+            }
     }
 
     // MARK: 舞台
 
-    private func stage(at time: TimeInterval) -> some View {
+    private func stage(at time: TimeInterval, scheme: ColorScheme) -> some View {
         let mood = model.mood
         let breath = sin(2 * .pi * time / mood.breathPeriod)
         let sway = sin(2 * .pi * time / mood.swayPeriod)
         let squash = squashAmount(at: time)
-        let extra = actionTransform(at: time)
+        let motion = model.actionPose(at: time)
 
-        let rotation = mood.leanDegrees + sway * mood.swayDegrees + model.flightLean + extra.tilt
-        let lift = breath * -1.6 + extra.lift
+        // 三层姿态合成：心情的呼吸摇摆 + 动作的关键帧 + 落地压扁。
+        let pose = PetPose(
+            dx: motion.dx,
+            dy: breath * -1.6 + motion.dy,
+            rotation: mood.leanDegrees + sway * mood.swayDegrees + model.flightLean + motion.rotation,
+            scaleX: motion.scaleX * (hover ? 1.04 : 1) * (1 + squash * 0.16),
+            scaleY: motion.scaleY * (1 + 0.012 * breath) * (1 - squash * 0.14),
+            skew: motion.skew,
+            opacity: motion.opacity
+        )
 
         return ZStack(alignment: .top) {
             if !model.airborne {
                 groundShadow(breath: breath, squash: squash)
             }
 
-            character(
-                scaleX: (hover ? 1.04 : 1) * (1 + squash * 0.16),
-                scaleY: (1 + 0.012 * breath) * (1 - squash * 0.14),
-                rotation: rotation,
-                lift: lift
-            )
+            character(pose: pose)
+
+            if !model.effects.isEmpty {
+                effectsLayer(at: time, scheme: scheme)
+            }
 
             if let bubble = model.bubble {
                 bubbleView(bubble, at: time)
@@ -88,8 +129,13 @@ struct WhalePetView: View {
 
     // MARK: 角色
 
-    private func character(scaleX: CGFloat, scaleY: CGFloat, rotation: Double, lift: Double) -> some View {
-        ZStack(alignment: .bottom) {
+    private func character(pose: PetPose) -> some View {
+        // 斜切（扭动、甩尾）：`projectionEffect` 的剪切是绕左上角做的，
+        // 拿半高补一下，看上去才像绕身体中线在扭。
+        let shear = tan(pose.skew * .pi / 180)
+        let shearCompensation = -shear * 76
+
+        return ZStack(alignment: .bottom) {
             // 立绘背后垫一层压暗、下移的同一张图当投影。
             //
             // 这里原本是 `.shadow(radius: 8)`：模糊要离屏渲染，而这个窗口每秒重绘
@@ -100,8 +146,10 @@ struct WhalePetView: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .frame(height: 152)
-                .saturation(0)
-                .brightness(-0.28)
+                // 剪影用 `colorMultiply(.black)`：一次混合就够。
+                // 原来是 `.saturation(0).brightness(-0.28)`——两道颜色矩阵，
+                // 每一帧都要重算一遍，实测这是待机功耗的大头。
+                .colorMultiply(.black)
                 .opacity(0.22)
                 .offset(y: 3)
 
@@ -111,11 +159,59 @@ struct WhalePetView: View {
                 .scaledToFit()
                 .frame(height: 152)
         }
-        // 呼吸：横向几乎不动、纵向轻微拉伸，比整体缩放自然
-        .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
+        // 呼吸与动作的缩放：锚点在脚底，像重心在脚下
+        .scaleEffect(x: pose.scaleX, y: pose.scaleY, anchor: .bottom)
+        // 斜切只在真扭动时才挂上去：`projectionEffect` 会强制离屏合成，
+        // 平时（skew 恒为 0）白付这笔钱，实测待机功耗翻倍。
+        .modifier(PetShearModifier(shear: shear))
         // 摇摆：锚点在脚底，看起来像重心在晃
-        .rotationEffect(.degrees(rotation), anchor: .bottom)
-        .offset(y: 4 + lift)
+        .rotationEffect(.degrees(pose.rotation), anchor: .bottom)
+        .offset(x: pose.dx + shearCompensation, y: 4 + pose.dy)
+        .opacity(pose.opacity)
+    }
+
+    // MARK: 情绪符号
+
+    /// 飘在头顶的符号层。全部是 SF Symbols，跟着动作一起漂、一起淡。
+    private func effectsLayer(at time: TimeInterval, scheme: ColorScheme) -> some View {
+        let now = Date(timeIntervalSinceReferenceDate: time)
+        return ZStack(alignment: .topLeading) {
+            ForEach(model.effects) { effect in
+                effectBadge(effect, now: now, scheme: scheme)
+            }
+        }
+        .frame(width: Self.baseSize.width, height: Self.baseSize.height, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
+
+    private func effectBadge(_ effect: PetEffect, now: Date, scheme: ColorScheme) -> some View {
+        let progress = effect.progress(at: now)
+        let x = effect.origin.x * Self.baseSize.width
+            + effect.drift.width * Self.baseSize.width * CGFloat(progress)
+        let y = effect.origin.y * Self.baseSize.height
+            + effect.drift.height * Self.baseSize.height * CGFloat(progress)
+
+        let fadeIn = min(1, progress / 0.12)
+        let fadeOut = progress > 0.62 ? max(0, (1 - progress) / 0.38) : 1
+        let scale = effect.kind.size * effect.scale * CGFloat(0.85 + 0.3 * progress)
+
+        return Image(systemName: effect.kind.symbol)
+            .font(.system(size: scale, weight: .semibold))
+            .foregroundStyle(tint(for: effect.kind, scheme: scheme))
+            .rotationEffect(.degrees(effect.spin * progress))
+            .opacity(fadeIn * fadeOut * 0.95)
+            .position(x: x, y: y)
+    }
+
+    private func tint(for kind: PetEffectKind, scheme: ColorScheme) -> Color {
+        switch kind {
+        case .zzz: AppTheme.textSecondary(scheme)
+        case .heart: Color(red: 0.94, green: 0.36, blue: 0.52)
+        case .star, .sparkle, .confetti, .note: AppTheme.gold
+        case .sweat: Color(red: 0.32, green: 0.62, blue: 0.95)
+        case .question, .exclamation: AppTheme.textPrimary(scheme)
+        case .anger: AppTheme.critical
+        }
     }
 
     // MARK: 气泡
@@ -158,20 +254,6 @@ struct WhalePetView: View {
         let compress = min(1, age / 0.07)
         let release = max(0, 1 - (age - 0.07) / 0.35)
         return model.squashStrength * CGFloat(compress * release)
-    }
-
-    /// 空闲小动作：用 `sin(πp)` 让它自己回到原位。
-    private func actionTransform(at time: TimeInterval) -> (lift: Double, tilt: Double) {
-        let progress = model.action.progress(at: time - model.actionStartedAt.timeIntervalSinceReferenceDate)
-        guard progress > 0, progress < 1 else { return (0, 0) }
-        let pulse = sin(.pi * progress)
-        return switch model.action {
-        case .lookLeft: (0, -4.5 * pulse)
-        case .lookRight: (0, 4.5 * pulse)
-        case .crouch: (-3 * pulse, 0)
-        case .hop(let height): (-Double(height) * pulse, 0)
-        case .none: (0, 0)
-        }
     }
 
     private func easeOutBack(_ x: Double) -> Double {

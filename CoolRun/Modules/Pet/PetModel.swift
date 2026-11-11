@@ -67,13 +67,35 @@ enum PetMood: Equatable, Sendable {
 
 // MARK: - 一次小动作
 
-/// 手边没有骨骼，动作只能靠整只身体做：歪一下头、蹦一下、缩一下。
+/// 手边没有骨骼，动作只能靠整只身体做：歪一下头、蹦一下、缩一下、转一圈。
+///
+/// 每个动作对应的关键帧在 `PetMotionLibrary` 里，这里只负责「叫什么、多久」。
 enum PetAction: Equatable, Sendable {
     case none
     case lookLeft
     case lookRight
     case crouch
     case hop(CGFloat)
+    /// 原地转一圈。
+    case spin
+    /// 向一侧冲（正数向右）。
+    case dash(CGFloat)
+    /// 扭一扭。
+    case wiggle
+    /// 伸懒腰。
+    case stretch
+    /// 抖一抖。
+    case shake
+    /// 蹦两下庆祝。
+    case celebrate
+    /// 瘫掉。
+    case faint
+    /// 打哈欠。
+    case yawn
+    /// 点头。
+    case nod
+    /// 探头。
+    case peek
 
     nonisolated var duration: TimeInterval {
         switch self {
@@ -81,6 +103,37 @@ enum PetAction: Equatable, Sendable {
         case .lookLeft, .lookRight: 1.8
         case .crouch: 1.4
         case .hop: 0.62
+        case .spin: 0.9
+        case .dash: 0.78
+        case .wiggle: 1.5
+        case .stretch: 1.9
+        case .shake: 0.7
+        case .celebrate: 1.15
+        case .faint: 2.6
+        case .yawn: 1.7
+        case .nod: 1.1
+        case .peek: 2.2
+        }
+    }
+
+    /// 这个动作怎么画。`none` 没有。
+    nonisolated var motion: PetMotion? {
+        switch self {
+        case .none: nil
+        case .lookLeft: PetMotionLibrary.lookLeft
+        case .lookRight: PetMotionLibrary.lookRight
+        case .crouch: PetMotionLibrary.crouch
+        case .hop(let height): PetMotionLibrary.hopMotion(height: height)
+        case .spin: PetMotionLibrary.spin
+        case .dash(let direction): PetMotionLibrary.dash(direction)
+        case .wiggle: PetMotionLibrary.wiggle
+        case .stretch: PetMotionLibrary.stretch
+        case .shake: PetMotionLibrary.shake
+        case .celebrate: PetMotionLibrary.celebrate
+        case .faint: PetMotionLibrary.faint
+        case .yawn: PetMotionLibrary.yawn
+        case .nod: PetMotionLibrary.nod
+        case .peek: PetMotionLibrary.peek
         }
     }
 
@@ -123,12 +176,36 @@ final class PetModel {
 
     private(set) var isSleeping = false
 
+    /// 正在被搬着走（屏幕上溜达）。走的时候要满帧，不然看着像漂移。
+    private(set) var isGliding = false
+
+    /// 飘在头顶的小符号。视图按时钟画，这里只管生成和回收。
+    private(set) var effects: [PetEffect] = []
+
+    /// 渲染时钟：视图读它触发重绘。
+    ///
+    /// 没用 `TimelineView(.periodic(by:))`——它的间隔只是「最早什么时候可以更新」，
+    /// 视图一有变化 SwiftUI 照样按屏幕刷新率（这台 120Hz）重算；换成
+    /// `.animation(minimumInterval:)` 更糟，它本来就跟着显示刷新率跑。
+    /// 自己按 `frameInterval` 发 tick，才真的能把重绘压到 6fps，动作时升到 24fps。
+    private(set) var frameTick = 0
+    private(set) var frameTime = Date.timeIntervalSinceReferenceDate
+
+    /// 关掉动效时停掉渲染时钟，画面定格（点击、拖动照常）。
+    var animating = true
+
+    private var renderTask: Task<Void, Never>?
+
+    /// 「去那边逛逛」的请求：参数是往哪边、走多远（点）。由 `PetController` 搬窗口。
+    @ObservationIgnored var onWander: ((CGFloat) -> Void)?
+
     /// 渲染帧率（秒/帧）。
     ///
     /// 菜单栏常驻程序不该为了一个装饰动画一直满帧重绘——那样即使什么都不做，
     /// 也会把 CPU 从睡眠里叫醒。所以按状态分档：睡着 3fps、待机 12fps、
     /// 在干活 20fps，只有真的飞起来或者正在做动作才用满帧 24fps。
     var frameInterval: TimeInterval {
+        if isGliding { return 1.0 / 24.0 }
         if airborne { return 1.0 / 24.0 }
         if action != .none { return 1.0 / 24.0 }
         if isSleeping { return 1.0 / 2.0 }
@@ -148,6 +225,7 @@ final class PetModel {
     private var wasRunning = false
     private var transientMood: (mood: PetMood, until: Date)?
     private var bubbleToken = 0
+    private var lastZzz = Date.distantPast
     private var loopTask: Task<Void, Never>?
     private var idleTask: Task<Void, Never>?
 
@@ -163,9 +241,24 @@ final class PetModel {
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }
+        renderTask?.cancel()
+        renderTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if self.animating {
+                    self.frameTime = Date.timeIntervalSinceReferenceDate
+                    self.frameTick &+= 1
+                    try? await Task.sleep(for: .seconds(self.frameInterval))
+                } else {
+                    // 定格时低频转一圈，别把任务停死，重新开动效要能立刻接上。
+                    try? await Task.sleep(for: .seconds(0.5))
+                }
+            }
+        }
+
         idleTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Double.random(in: 16...34)))
+                try? await Task.sleep(for: .seconds(Double.random(in: 9...22)))
                 guard !Task.isCancelled, let self else { return }
                 self.playIdleAction()
             }
@@ -175,11 +268,27 @@ final class PetModel {
     func stop() {
         loopTask?.cancel()
         idleTask?.cancel()
+        renderTask?.cancel()
         loopTask = nil
         idleTask = nil
+        renderTask = nil
     }
 
     // MARK: 外部事件
+
+    /// 窗口正在被搬着走。只影响帧率。
+    func setGliding(_ gliding: Bool) {
+        guard gliding != isGliding else { return }
+        isGliding = gliding
+    }
+
+    /// 冒一个小符号出来。
+    func spawn(_ kind: PetEffectKind, count: Int = 1, at origin: CGPoint = CGPoint(x: 0.5, y: 0.3)) {
+        effects.append(contentsOf: PetEffectBurst.make(kind, count: count, at: origin))
+        if effects.count > 18 {
+            effects.removeFirst(effects.count - 18)
+        }
+    }
 
     func setDragging(_ dragging: Bool) {
         isDragging = dragging
@@ -200,6 +309,9 @@ final class PetModel {
     func land(strength: CGFloat) {
         squashStrength = max(0.2, min(1, strength))
         squashStartedAt = Date()
+        if strength > 0.55 {
+            spawn(.sweat, count: 2, at: CGPoint(x: 0.5, y: 0.36))
+        }
     }
 
     /// 被戳了一下。
@@ -211,6 +323,7 @@ final class PetModel {
         } else {
             say(Self.pokeLines.randomElement() ?? "嗯？", seconds: 2.2)
         }
+        spawn(.heart, count: 2, at: CGPoint(x: 0.5, y: 0.26))
         play(.hop(7))
     }
 
@@ -232,6 +345,12 @@ final class PetModel {
     private func syncMood() {
         let coordinator = AgentCoordinator.shared
         let now = Date()
+
+        pruneEffects(at: now)
+        if isSleeping || mood == .sleeping, now.timeIntervalSince(lastZzz) > 1.9 {
+            lastZzz = now
+            spawn(.zzz, count: 1, at: CGPoint(x: 0.66, y: 0.24))
+        }
 
         if coordinator.isRunning {
             wasRunning = true
@@ -271,6 +390,29 @@ final class PetModel {
         guard next != mood else { return }
         mood = next
         say(Self.bubbleText(for: next), seconds: nil)
+        react(to: next)
+    }
+
+    /// 换心情时顺手给个动作和小符号，别只是换张脸。
+    private func react(to mood: PetMood) {
+        switch mood {
+        case .success:
+            play(.celebrate)
+            spawn(.sparkle, count: 4, at: CGPoint(x: 0.5, y: 0.3))
+        case .error:
+            play(.faint)
+            spawn(.anger, count: 2, at: CGPoint(x: 0.5, y: 0.24))
+        case .waiting:
+            spawn(.question, count: 1, at: CGPoint(x: 0.72, y: 0.22))
+        case .thinking:
+            spawn(.note, count: 1, at: CGPoint(x: 0.28, y: 0.24))
+        case .working:
+            spawn(.sparkle, count: 1, at: CGPoint(x: 0.3, y: 0.3))
+        case .sleeping:
+            spawn(.zzz, count: 1, at: CGPoint(x: 0.66, y: 0.24))
+        case .idle:
+            break
+        }
     }
 
     private func say(_ text: String?, seconds: Double?) {
@@ -288,15 +430,46 @@ final class PetModel {
 
     // MARK: 空闲小动作
 
+    /// 没人管的时候自己找点事做。
+    ///
+    /// 权重是调出来的：左右看、扭一扭这类小动作占大头（安静），
+    /// 溜达、转圈这类大动作占小头（不然一直在动，吵）。
     private func playIdleAction() {
-        guard mood == .idle, !isDragging, !isSleeping, !airborne, action == .none else { return }
-        let picked: PetAction = switch Int.random(in: 0..<4) {
-        case 0: .lookLeft
-        case 1: .lookRight
-        case 2: .hop(9)
-        default: .crouch
+        guard mood == .idle, !isDragging, !isSleeping, !airborne, !isGliding, action == .none else { return }
+
+        switch Int.random(in: 0..<100) {
+        case ..<16: play(.lookLeft)
+        case ..<32: play(.lookRight)
+        case ..<42: play(.hop(9))
+        case ..<50: play(.crouch)
+        case ..<58: play(.wiggle)
+        case ..<66: play(.stretch)
+        case ..<72: play(.nod)
+        case ..<77: play(.peek)
+        case ..<82: play(.yawn)
+        case ..<88: play(.spin)
+        case ..<94: wander()
+        default: play(.dash(CGFloat.random(in: -1...1)))
         }
-        play(picked)
+    }
+
+    /// 在屏幕上溜达一段：动作交给窗口，身体顺带做个前冲。
+    private func wander() {
+        guard let onWander else { return }
+        let direction: CGFloat = Bool.random() ? 1 : -1
+        play(.dash(direction))
+        onWander(direction * CGFloat.random(in: 60...180))
+    }
+
+    private func pruneEffects(at now: Date) {
+        guard !effects.isEmpty else { return }
+        effects.removeAll { !$0.isAlive(at: now) }
+    }
+
+    /// 当前动作的姿态。视图和模型用同一个时钟，掉帧只是跳一下，不会跑偏。
+    func actionPose(at time: TimeInterval) -> PetPose {
+        guard let motion = action.motion else { return .rest }
+        return motion.pose(elapsed: time - actionStartedAt.timeIntervalSinceReferenceDate)
     }
 
     private func play(_ next: PetAction) {

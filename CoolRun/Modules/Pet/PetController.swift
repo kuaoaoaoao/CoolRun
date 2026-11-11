@@ -21,6 +21,7 @@ final class PetController {
     private var samples: [(time: TimeInterval, point: NSPoint)] = []
     private var velocity = CGVector.zero
     private var physicsTask: Task<Void, Never>?
+    private var glideTask: Task<Void, Never>?
 
     private let defaults = UserDefaults.standard
 
@@ -79,10 +80,26 @@ final class PetController {
         self.panel = panel
         self.hostingView = host
         isVisible = true
+        PetModel.shared.onWander = { [weak self] dx in
+            self?.glide(dx: dx)
+        }
+        PetModel.shared.animating = animates
         PetModel.shared.start()
+
+        #if DEBUG
+        // 调试用：`COOLRUN_PET_GLIDE_DEMO=1` 启动后自己走一趟，
+        // 省得等那个 9~22 秒的随机空闲动作才看得到效果。
+        if ProcessInfo.processInfo.environment["COOLRUN_PET_GLIDE_DEMO"] != nil {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1.5))
+                self?.glide(dx: 220)
+            }
+        }
+        #endif
     }
 
     func hide() {
+        stopGlide()
         stopPhysics()
         panel?.orderOut(nil)
         isVisible = false
@@ -90,6 +107,7 @@ final class PetController {
     }
 
     func close() {
+        stopGlide()
         stopPhysics()
         panel?.orderOut(nil)
         panel = nil
@@ -104,6 +122,7 @@ final class PetController {
         guard on != animates else { return }
         animates = on
         defaults.set(on, forKey: "pet.animate")
+        PetModel.shared.animating = on
         hostingView?.rootView = PetRootView(scale: scale, animates: on)
     }
 
@@ -126,6 +145,7 @@ final class PetController {
 
     func beginDrag() {
         guard let panel else { return }
+        stopGlide()
         stopPhysics()
         dragAnchor = panel.frame.origin
         samples = [(CACurrentMediaTime(), panel.frame.origin)]
@@ -186,6 +206,61 @@ final class PetController {
             dy *= k
         }
         return CGVector(dx: dx, dy: dy)
+    }
+
+    // MARK: 溜达
+
+    /// 把窗口平移到旁边一段距离。
+    ///
+    /// 这是「她自己走动」的唯一实现方式：窗口是固定的画布，
+    /// 想让一只平图宠物真的换位置，只能搬窗口。拖动、飞行、隐藏都会打断它。
+    func glide(dx: CGFloat, duration: TimeInterval = 1.15) {
+        guard let panel, dragAnchor == nil, physicsTask == nil else { return }
+
+        let start = panel.frame.origin
+        let targetX = Self.glideTargetX(
+            start: start.x,
+            dx: dx,
+            size: size,
+            bounds: activeBounds(for: panel.frame)
+        )
+        guard abs(targetX - start.x) > 6 else { return }
+
+        stopGlide()
+        PetModel.shared.setGliding(true)
+
+        glideTask = Task { @MainActor [weak self] in
+            let began = CACurrentMediaTime()
+            while !Task.isCancelled {
+                let progress = min(1, (CACurrentMediaTime() - began) / duration)
+                // 起止都慢一点，看着像游过去而不是被推过去。
+                let eased = progress < 0.5
+                    ? 2 * progress * progress
+                    : 1 - 2 * (1 - progress) * (1 - progress)
+                panel.setFrameOrigin(
+                    NSPoint(x: start.x + (targetX - start.x) * CGFloat(eased), y: start.y)
+                )
+                if progress >= 1 { break }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.saveOrigin(panel.frame.origin)
+            PetModel.shared.setGliding(false)
+            self.glideTask = nil
+        }
+    }
+
+    /// 溜达的落点：夹在屏幕可活动区域内，别撞出边界。
+    nonisolated static func glideTargetX(start: CGFloat, dx: CGFloat, size: CGSize, bounds: CGRect) -> CGFloat {
+        let maxX = max(bounds.minX, bounds.maxX - size.width)
+        return min(max(start + dx, bounds.minX), maxX)
+    }
+
+    private func stopGlide() {
+        guard glideTask != nil else { return }
+        glideTask?.cancel()
+        glideTask = nil
+        PetModel.shared.setGliding(false)
     }
 
     // MARK: 物理

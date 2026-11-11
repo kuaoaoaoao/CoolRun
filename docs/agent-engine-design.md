@@ -243,6 +243,7 @@ enum ToolPermission: Int, Comparable {
 | `diagnostics_network` | L0 | 网络诊断报告 |
 | `diagnostics_storage` | L0 | 磁盘占用分析 |
 | `ui_show_module` | L1 | 切换当前面板（"给我看金价"） |
+| `pet_wander` | L1 | 让桌面上的鲸鱼往左/右走一段（引起注意、汇报进度） |
 | `ui_notify` | L1 | 发本地通知 |
 | `clipboard_copy` | L1 | 写入剪贴板 |
 | `notes_create` | L2 | 新建笔记（需确认） |
