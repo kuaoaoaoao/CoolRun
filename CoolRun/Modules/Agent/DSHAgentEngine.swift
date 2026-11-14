@@ -212,6 +212,12 @@ final class DSHAgentEngine: AgentEngine {
         let url = homeDirectory().appendingPathComponent("coolrun.patch.yml")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try yaml.write(to: url, atomically: true, encoding: .utf8)
+        // 这个文件里带着 MCP 的 Bearer token（DSH 要用它回连我们），
+        // 默认 0644 意味着同一台机器上别的用户/进程能读到，收紧成 0600。
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
         return url
     }
 

@@ -145,31 +145,16 @@ final class SwiftAgentEngine: AgentEngine {
                 let arguments = call.arguments
                 continuation.yield(.toolCallStarted(id: call.id, name: call.name, arguments: arguments))
 
-                // 持久写入类工具必须先经过用户确认，否则直接拒绝并告知模型。
-                if let descriptor = ToolRegistry.shared.descriptor(named: call.name),
-                   descriptor.permission >= .persistent,
-                   let approvalHandler {
-                    let approved = await approvalHandler(descriptor, arguments)
-                    if !approved {
-                        let denial = "用户拒绝了这次操作。请改用不需要写入的方式，或先向用户说明意图。"
-                        working.append(AgentMessage(
-                            role: .tool,
-                            content: denial,
-                            toolCallID: call.id,
-                            toolName: call.name,
-                            isError: true
-                        ))
-                        continuation.yield(.toolCallFinished(
-                            id: call.id,
-                            name: call.name,
-                            output: denial,
-                            isError: true
-                        ))
-                        continue
-                    }
-                }
-
-                let result = await ToolRegistry.shared.execute(name: call.name, arguments: arguments)
+                // 权限上限与持久写入的确认都在 ToolRegistry 里统一执行，
+                // 这样 MCP 回连（DSH 引擎）与原生引擎走的是同一道闸门。
+                let result = await ToolRegistry.shared.execute(
+                    name: call.name,
+                    arguments: arguments,
+                    policy: ToolRegistry.ExecutionPolicy(
+                        maxLevel: AgentSettings.shared.toolLevel,
+                        approval: approvalHandler
+                    )
+                )
                 let output = result.content.count > Self.toolResultLimit
                     ? String(result.content.prefix(Self.toolResultLimit)) + "\n…（结果已截断）"
                     : result.content

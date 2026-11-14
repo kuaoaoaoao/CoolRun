@@ -191,12 +191,63 @@ final class ToolRegistry {
         entries[name]?.descriptor
     }
 
-    func execute(name: String, arguments: JSONValue) async -> ToolResult {
+    /// 一次工具调用的执行策略。权限上限、用户确认、超时都收在这里。
+    ///
+    /// 为什么必须在这里拦：把工具从 schema 里藏起来只是「不告诉模型」，
+    /// 不是「不让它做」。模型可以凭上下文里的旧工具名直接点名调用，
+    /// DSH 那边也是通过 MCP 回连到同一张表——所有通道都走 `execute`，
+    /// 所以闸门必须装在 `execute` 里。
+    struct ExecutionPolicy {
+        /// 没显式给策略时按最保守处理：只放行只读工具。
+        /// 这样将来新增的调用点忘了传策略，也不会意外获得写权限。
+        var maxLevel: ToolPermission = .read
+        var approval: (@MainActor (ToolDescriptor, JSONValue) async -> Bool)?
+        var timeout: Duration? = .seconds(60)
+    }
+
+    func execute(
+        name: String,
+        arguments: JSONValue,
+        policy: ExecutionPolicy = ExecutionPolicy()
+    ) async -> ToolResult {
         guard let entry = entries[name] else {
-            return .failure("未知工具：\(name)")
+            let failure = ToolResult.failure("未知工具：\(name)")
+            AgentAuditLog.shared.record(tool: name, arguments: arguments, result: failure, duration: 0)
+            return failure
         }
+        let descriptor = entry.descriptor
         let started = Date()
-        let result = await entry.handler(arguments)
+
+        func deny(_ message: String) -> ToolResult {
+            let failure = ToolResult.failure(message)
+            AgentAuditLog.shared.record(
+                tool: name,
+                arguments: arguments,
+                result: failure,
+                duration: Date().timeIntervalSince(started)
+            )
+            return failure
+        }
+
+        // 1. 权限上限：执行期校验，不能只靠「不把工具告诉模型」。
+        guard descriptor.permission <= policy.maxLevel else {
+            return deny(
+                "权限不足：\(name) 属于「\(descriptor.permission.displayName)」，"
+                + "当前上限是「\(policy.maxLevel.displayName)」。"
+            )
+        }
+
+        // 2. 持久写入必须有人点头；没有确认通道时按拒绝处理（安全默认）。
+        if descriptor.permission >= .persistent {
+            guard let approval = policy.approval else {
+                return deny("\(name) 会写入持久数据，需要用户确认，但当前通道没有确认界面。")
+            }
+            guard await approval(descriptor, arguments) else {
+                return deny("用户拒绝了这次操作。请改用不需要写入的方式，或先向用户说明意图。")
+            }
+        }
+
+        let result = await Self.awaitTool(entry, arguments: arguments, timeout: policy.timeout)
         AgentAuditLog.shared.record(
             tool: name,
             arguments: arguments,
@@ -204,6 +255,47 @@ final class ToolRegistry {
             duration: Date().timeIntervalSince(started)
         )
         return result
+    }
+
+    /// 跑工具并给一个上限。工具本身不一定可取消（比如正在等网络响应），
+    /// 但至少不能让整个回合被一个卡死的工具挂住。
+    private static func awaitTool(
+        _ entry: Entry,
+        arguments: JSONValue,
+        timeout: Duration?
+    ) async -> ToolResult {
+        guard let timeout else {
+            return await entry.handler(arguments)
+        }
+        let box = CompletionBox()
+        return await withCheckedContinuation { continuation in
+            Task { @MainActor in
+                let result = await entry.handler(arguments)
+                if box.claim() {
+                    continuation.resume(returning: result)
+                }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: timeout)
+                if box.claim() {
+                    continuation.resume(
+                        returning: .failure("工具 \(entry.descriptor.name) 执行超时，已放弃等待。")
+                    )
+                }
+            }
+        }
+    }
+
+    /// 两个分支（结果、超时）谁先到谁说话，只允许说一次。
+    @MainActor
+    private final class CompletionBox {
+        private var finished = false
+
+        func claim() -> Bool {
+            guard !finished else { return false }
+            finished = true
+            return true
+        }
     }
 
     func openAISchemas(upTo limit: ToolPermission) -> [JSONValue] {

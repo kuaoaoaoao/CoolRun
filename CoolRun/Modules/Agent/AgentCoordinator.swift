@@ -264,7 +264,13 @@ final class AgentCoordinator {
             ))
 
             let started = Date()
-            let result = await ToolRegistry.shared.execute(name: name, arguments: arguments)
+            // 上面已经验过等级、也已经问过用户，这里把结论原样交给执行器，
+            // 免得同一件事被问两遍、或者被闸门第二次拦下。
+            let result = await ToolRegistry.shared.execute(
+                name: name,
+                arguments: arguments,
+                policy: .init(maxLevel: allowed, approval: { _, _ in true })
+            )
             let elapsed = Date().timeIntervalSince(started)
 
             if let index = self.activities.firstIndex(where: { $0.id == callID }) {
@@ -333,7 +339,8 @@ final class AgentCoordinator {
         continuation.resume(returning: approved)
     }
 
-    private func requestApproval(
+    /// 由任何需要确认的通道调用（原生引擎、MCP 回连）。
+    func requestApproval(
         _ descriptor: ToolDescriptor,
         _ arguments: JSONValue
     ) async -> Bool {

@@ -33,7 +33,8 @@ final class AgentActionToolsTests: XCTestCase {
     func testSwitchPanelRejectsUnknownModule() async {
         let result = await ToolRegistry.shared.execute(
             name: "ui_switch_panel",
-            arguments: .object(["module": .string("not-a-module")])
+            arguments: .object(["module": .string("not-a-module")]),
+            policy: .init(maxLevel: .reversible)
         )
         XCTAssertTrue(result.isError)
         XCTAssertTrue(result.content.contains("未知模块"))
@@ -42,16 +43,26 @@ final class AgentActionToolsTests: XCTestCase {
     func testSwitchPanelAcceptsKnownModule() async {
         let result = await ToolRegistry.shared.execute(
             name: "ui_switch_panel",
-            arguments: .object(["module": .string(ViewMode.notes.rawValue)])
+            arguments: .object(["module": .string(ViewMode.notes.rawValue)]),
+            policy: .init(maxLevel: .reversible)
         )
         XCTAssertFalse(result.isError, result.content)
     }
 
+    /// 测试里模拟「用户点了同意」。闸门本身由 ToolGateTests 单独验。
+    private func executeApproved(_ name: String, _ arguments: JSONValue) async -> ToolResult {
+        await ToolRegistry.shared.execute(
+            name: name,
+            arguments: arguments,
+            policy: .init(maxLevel: .dangerous, approval: { _, _ in true })
+        )
+    }
+
     func testNotesCreateThenDelete() async {
         let marker = "agent-test-\(UUID().uuidString.prefix(8))"
-        let result = await ToolRegistry.shared.execute(
-            name: "notes_create",
-            arguments: .object([
+        let result = await executeApproved(
+            "notes_create",
+            .object([
                 "title": .string(marker),
                 "body": .string("由单元测试创建，随后删除。"),
             ])
@@ -62,9 +73,9 @@ final class AgentActionToolsTests: XCTestCase {
             return XCTFail("笔记没有落库：\(result.content)")
         }
 
-        let pinned = await ToolRegistry.shared.execute(
-            name: "notes_toggle_pin",
-            arguments: .object(["note_id": .string(note.id.uuidString)])
+        let pinned = await executeApproved(
+            "notes_toggle_pin",
+            .object(["note_id": .string(note.id.uuidString)])
         )
         XCTAssertFalse(pinned.isError, pinned.content)
 
@@ -73,22 +84,21 @@ final class AgentActionToolsTests: XCTestCase {
     }
 
     func testNotesCreateRejectsEmptyBody() async {
-        let result = await ToolRegistry.shared.execute(
-            name: "notes_create",
-            arguments: .object(["body": .string("   ")])
-        )
+        let result = await executeApproved("notes_create", .object(["body": .string("   ")]))
         XCTAssertTrue(result.isError)
+        XCTAssertTrue(result.content.contains("正文"), result.content)
     }
 
     func testReminderRequiresPositiveMinutes() async {
-        let result = await ToolRegistry.shared.execute(
-            name: "reminder_create",
-            arguments: .object([
+        let result = await executeApproved(
+            "reminder_create",
+            .object([
                 "title": .string("测试提醒"),
                 "after_minutes": .number(0),
             ])
         )
         XCTAssertTrue(result.isError)
+        XCTAssertTrue(result.content.contains("after_minutes"), result.content)
     }
 
     func testApprovalHandlerIsWiredByCoordinator() {

@@ -236,7 +236,16 @@ final class CoolRunMCPHost {
             let argumentsJSON = (try? JSONSerialization.data(withJSONObject: arguments))
                 .flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) } ?? .object([:])
 
-            let result = await ToolRegistry.shared.execute(name: name, arguments: argumentsJSON)
+            let result = await ToolRegistry.shared.execute(
+                name: name,
+                arguments: argumentsJSON,
+                policy: ToolRegistry.ExecutionPolicy(
+                    maxLevel: AgentSettings.shared.toolLevel,
+                    approval: { descriptor, arguments in
+                        await AgentCoordinator.shared.requestApproval(descriptor, arguments)
+                    }
+                )
+            )
             return RPCResult(result: [
                 "content": [["type": "text", "text": result.content]],
                 "isError": result.isError,
