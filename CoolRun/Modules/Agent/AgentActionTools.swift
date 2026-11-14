@@ -331,21 +331,28 @@ enum AgentActionTools {
             let pipe = Pipe()
             process.standardError = pipe
 
-            do {
-                try process.run()
-            } catch {
-                return .failure("无法启动截图命令：\(error.localizedDescription)")
+            // 等进程退出要 0.3–1 秒。用 waitUntilExit() 会把主线程钉住这么久，
+            // 桌宠会卡一下、面板也点不动，所以改成等通知。
+            let status: Int32 = await withCheckedContinuation { continuation in
+                process.terminationHandler = { finished in
+                    continuation.resume(returning: finished.terminationStatus)
+                }
+                do {
+                    try process.run()
+                } catch {
+                    process.terminationHandler = nil
+                    continuation.resume(returning: -1)
+                }
             }
-            process.waitUntilExit()
 
-            guard process.terminationStatus == 0,
+            guard status == 0,
                   FileManager.default.fileExists(atPath: destination.path)
             else {
                 let message = String(
                     data: pipe.fileHandleForReading.readDataToEndOfFile(),
                     encoding: .utf8
                 ) ?? ""
-                return .failure("截图失败（退出码 \(process.terminationStatus)）：\(message)")
+                return .failure("截图失败（退出码 \(status)）：\(message)")
             }
             return .text("截图已保存到 \(destination.path)")
         }

@@ -52,6 +52,7 @@ final class CoolRunMCPHost {
                     switch state {
                     case .ready:
                         host.port = host.listener?.port?.rawValue
+                        PluginHost.blockedAgentPort = host.port
                         // 脚本化 UI 测试（以及本机调试）可以用环境变量固定 token，
                         // 否则每次启动都是随机的、外部读不到。只在显式设置时生效，
                         // 监听仍然只绑 127.0.0.1。
@@ -91,6 +92,7 @@ final class CoolRunMCPHost {
         isRunning = false
         port = nil
         token = nil
+        PluginHost.blockedAgentPort = nil
     }
 
     private static func makeToken() -> String {

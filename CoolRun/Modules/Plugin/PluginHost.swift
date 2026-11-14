@@ -145,10 +145,38 @@ enum PluginHost {
 
     // MARK: 同步 HTTP
 
+    /// 当前 Agent（MCP）服务器监听的端口，由 `CoolRunMCPHost` 在启停时写入。
+    ///
+    /// 用 `nonisolated(unsafe)` 而不是 MainActor 属性：读它的是插件桥的
+    /// 后台线程（`httpGetSync` 会阻塞，不能放主线程）。写入只发生在启停时，
+    /// 读的是一个对齐的 UInt16，不会读到半个值。
+    nonisolated(unsafe) static var blockedAgentPort: UInt16?
+
+    /// 判断 URL 是否指向本机 Agent（MCP）服务器的端口。
+    nonisolated static func targetsLocalAgentPort(
+        _ url: URL,
+        agentPort: UInt16? = PluginHost.blockedAgentPort
+    ) -> Bool {
+        guard let agentPort, let host = url.host?.lowercased() else { return false }
+        let loopback = ["127.0.0.1", "localhost", "::1", "[::1]"]
+        guard loopback.contains(host) else { return false }
+        return url.port.map { UInt16(clamping: $0) } == agentPort
+    }
+
     private nonisolated static func httpGetSync(_ urlString: String) -> String {
         guard let url = URL(string: urlString), let scheme = url.scheme,
               scheme == "http" || scheme == "https"
         else {
+            return ""
+        }
+
+        // 插件是本地第三方 JS，能读 manifest 就能发请求。127.0.0.1 上有我们自己的
+        // MCP 服务器（能调工具、能写文件），所以专门把它挡掉——不封整个回环，
+        // 因为插件连本地模型（11434）是正当用法。
+        if Self.targetsLocalAgentPort(url) {
+            FileHandle.standardError.write(
+                Data("[Plugin] 拒绝访问本地 Agent 端口：\(url.absoluteString)\n".utf8)
+            )
             return ""
         }
 
