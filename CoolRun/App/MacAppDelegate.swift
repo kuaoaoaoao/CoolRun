@@ -1083,7 +1083,9 @@ private struct StatusContextMenuView: View {
 }
 
 enum CoinIconRenderer {
-    private struct MotionState {
+    /// 菜单栏金币动画的纯几何状态。改成 internal 是为了能单测 ——
+    /// 算错的表现是图标画出边界，但窗口看不出错在哪。
+    struct MotionState {
         var centerX: CGFloat = 12
         var centerY: CGFloat = 9
         var width: CGFloat = 17
@@ -1095,7 +1097,7 @@ enum CoinIconRenderer {
         var shadowAlpha: CGFloat = 0
     }
 
-    private struct Palette {
+    struct Palette {
         var face: NSColor
         var rim: NSColor
         var detail: NSColor
@@ -1193,7 +1195,7 @@ enum CoinIconRenderer {
         return image
     }
 
-    private static func motionState(phase: CGFloat, motion: MenuBarCoinMotion) -> MotionState {
+    static func motionState(phase: CGFloat, motion: MenuBarCoinMotion) -> MotionState {
         switch motion {
         case .classicFlip:
             let faceAmount = abs(cos(phase))
@@ -1246,7 +1248,7 @@ enum CoinIconRenderer {
         }
     }
 
-    private static func palette(appearance: MenuBarCoinAppearance) -> Palette {
+    static func palette(appearance: MenuBarCoinAppearance) -> Palette {
         switch appearance {
         case .yuan:
             return Palette(
