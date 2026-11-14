@@ -80,7 +80,25 @@ if [ "$RUN_TESTS" -eq 1 ]; then
             echo "OK: $(grep -c 'Test case.*passed' "$log") 个用例通过"
         else
             echo "FAIL: 有测试未通过"
-            grep -A10 'Failing tests' "$log" | head -20
+            # 三种失败长得不一样，都要报出来，否则只看到「有测试未通过」
+            # 却不知道是哪个用例、还是测试代码压根没编译过。
+            if grep -qE '(^| )error: ' "$log"; then
+                echo "-- 编译错误 --"
+                # 保留「文件:行:错误」的完整定位，只把工作目录前缀去掉。
+                grep -E '(^| )error: ' "$log" | sed "s|$PWD/||" | sort -u | sed 's/^/  /' | head -20
+            fi
+            if grep -q 'Failing tests:' "$log"; then
+                echo "-- 失败的用例 --"
+                sed -n '/Failing tests:/,/^$/p' "$log" | grep -v 'Failing tests:' | sed 's/^[[:space:]]*/  /' | head -20
+            fi
+            if ! grep -qE '(^| )error: |Failing tests:' "$log"; then
+                echo "-- 日志里既没有编译错误也没有失败用例，最后 20 行如下 --"
+                tail -20 "$log" | sed 's/^/  /'
+            fi
+            kept="$PWD/.build/test-failure.log"
+            mkdir -p "$(dirname "$kept")"
+            cp "$log" "$kept"
+            echo "完整日志：$kept"
             fail=1
         fi
         rm -f "$log"
