@@ -104,6 +104,38 @@ final class PetDragMathTests: XCTestCase {
         XCTAssertEqual(moved, anchor)
     }
 
+    func testDragThresholdDoesNotLeaveAOffset() {
+        // 手势识别前已经走了 4 点，必须补回起点，否则窗口永远落后鼠标 4 点。
+        let anchor = NSPoint(x: 100, y: 100)
+        let mouse = NSPoint(x: 300, y: 200)
+        let translation = CGSize(width: 4, height: 3)
+        let start = PetController.dragStartMouse(current: mouse, initialTranslation: translation)
+        let origin = PetController.draggedOrigin(anchor: anchor, start: start, current: mouse)
+        XCTAssertEqual(origin.x, 104, accuracy: 0.001)
+        XCTAssertEqual(origin.y, 97, accuracy: 0.001)
+    }
+
+    func testStaleSamplesArePrunedBeforeThrow() {
+        // 先快速拖一段，再停住 0.6 秒——停住后松手不该被甩出去。
+        var samples: [(time: TimeInterval, point: NSPoint)] = []
+        for i in 0..<10 {
+            samples.append((time: 100 + Double(i) * 0.016, point: NSPoint(x: Double(i) * 30, y: 0)))
+        }
+        samples.append((time: 100.6, point: NSPoint(x: 270, y: 0)))
+        let kept = PetController.prunedSamples(samples, now: 100.65)
+        XCTAssertEqual(kept.count, 1, "停住之后只该剩最后一个样本")
+        XCTAssertEqual(kept.first?.point.x, 270)
+    }
+
+    func testFreshSamplesSurvivePruning() {
+        let samples: [(time: TimeInterval, point: NSPoint)] = [
+            (time: 10.0, point: NSPoint(x: 0, y: 0)),
+            (time: 10.05, point: NSPoint(x: 40, y: 0)),
+            (time: 10.1, point: NSPoint(x: 90, y: 0)),
+        ]
+        XCTAssertEqual(PetController.prunedSamples(samples, now: 10.11).count, 3)
+    }
+
     func testDraggedOriginDoesNotAccumulateAcrossSteps() {
         let anchor = NSPoint(x: 0, y: 0)
         let start = NSPoint(x: 100, y: 100)

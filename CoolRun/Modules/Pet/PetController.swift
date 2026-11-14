@@ -203,16 +203,35 @@ final class PetController {
 
     // MARK: 拖动
 
-    func beginDrag() {
+    /// 开始拖。`initialTranslation` 是 SwiftUI 手势在「识别成功那一刻」已经走过的位移
+    /// （`minimumDistance` 那 4 点）。不把它补回去，窗口会永远比鼠标落后 4 点，
+    /// 拖远一点就能看出来——那也是一种「飘」。
+    func beginDrag(initialTranslation: CGSize = .zero) {
         guard let panel else { return }
         stopGlide()
         stopPhysics()
         dragAnchor = panel.frame.origin
-        dragStartMouse = NSEvent.mouseLocation
+        // SwiftUI 的 y 轴向下，屏幕坐标向上，所以取负。
+        dragStartMouse = Self.dragStartMouse(
+            current: NSEvent.mouseLocation,
+            initialTranslation: initialTranslation
+        )
         samples = [(CACurrentMediaTime(), panel.frame.origin)]
         velocity = .zero
         PetModel.shared.setDragging(true)
         NSCursor.closedHand.set()
+    }
+
+    /// 只保留最近 `window` 秒的位移样本（默认 140ms）。
+    ///
+    /// 松手时的速度只该反映「最后一甩」。拖到一半停住、或者拖完再停一会儿
+    /// 才松手，旧样本必须剪掉，否则会莫名其妙被甩出去。
+    nonisolated static func prunedSamples(
+        _ samples: [(time: TimeInterval, point: NSPoint)],
+        now: TimeInterval,
+        window: TimeInterval = 0.14
+    ) -> [(time: TimeInterval, point: NSPoint)] {
+        samples.filter { now - $0.time <= window }
     }
 
     /// 拖动时窗口该在哪。
@@ -220,6 +239,11 @@ final class PetController {
     /// 不看 SwiftUI 给的 `translation`：那是视图坐标系里的位移，视图被
     /// `scaleEffect` 缩过就跟着缩，窗口一移动坐标系又跟着跑——两笔误差叠起来
     /// 就是主人看到的「飘」。这里只认屏幕坐标的差值，位移永远等于鼠标位移。
+    /// 手势起点的鼠标位置：当前鼠标位置减去手势已走过的位移。
+    nonisolated static func dragStartMouse(current: NSPoint, initialTranslation: CGSize) -> NSPoint {
+        NSPoint(x: current.x - initialTranslation.width, y: current.y + initialTranslation.height)
+    }
+
     nonisolated static func draggedOrigin(anchor: NSPoint, start: NSPoint, current: NSPoint) -> NSPoint {
         NSPoint(x: anchor.x + (current.x - start.x), y: anchor.y + (current.y - start.y))
     }
@@ -237,7 +261,7 @@ final class PetController {
         let now = CACurrentMediaTime()
         samples.append((now, origin))
         // 只留最近 140ms 的样本，松手时的速度才反映「最后一甩」。
-        samples.removeAll { now - $0.time > 0.14 }
+        samples = Self.prunedSamples(samples, now: now)
         if samples.count > 32 {
             samples.removeFirst(samples.count - 32)
         }
@@ -260,6 +284,9 @@ final class PetController {
         NSCursor.openHand.set()
         dragAnchor = nil
 
+        // 拖到一半停住再松手时，`samples` 里还留着刚才那段高速位移——
+        // 不剪掉的话她会被「甩」出去。松手这一刻只认最后 140ms。
+        samples = Self.prunedSamples(samples, now: CACurrentMediaTime())
         let thrown = throwVelocity()
         samples = []
 
@@ -496,7 +523,7 @@ struct PetRootView: View {
                     .onChanged { value in
                         if !dragging {
                             dragging = true
-                            PetController.shared.beginDrag()
+                            PetController.shared.beginDrag(initialTranslation: value.translation)
                         }
                         PetController.shared.drag(translation: value.translation)
                     }
