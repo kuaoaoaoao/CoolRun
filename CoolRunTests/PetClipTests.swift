@@ -80,3 +80,79 @@ final class PetClipTests: XCTestCase {
         XCTAssertNotEqual(model.clip, .eatRice, "视频不可用时不该再换片段")
     }
 }
+
+/// 拖拽的位移算术：窗口位移必须严格等于鼠标位移。
+///
+/// 老实现用的是 SwiftUI 的 `translation`，那是视图坐标系里的量——视图被
+/// `scaleEffect` 缩过就跟着缩，窗口一动坐标系又跟着跑，于是「飘」。
+@MainActor
+final class PetDragMathTests: XCTestCase {
+    func testDraggedOriginFollowsMouseExactly() {
+        let anchor = NSPoint(x: 500, y: 300)
+        let start = NSPoint(x: 640, y: 400)
+        let moved = PetController.draggedOrigin(
+            anchor: anchor, start: start, current: NSPoint(x: 780, y: 340)
+        )
+        XCTAssertEqual(moved.x, 640, accuracy: 0.001)
+        XCTAssertEqual(moved.y, 240, accuracy: 0.001)
+    }
+
+    func testDraggedOriginIsIdempotentWhenMouseDoesNotMove() {
+        let anchor = NSPoint(x: -120.5, y: 42)
+        let start = NSPoint(x: 10, y: 10)
+        let moved = PetController.draggedOrigin(anchor: anchor, start: start, current: start)
+        XCTAssertEqual(moved, anchor)
+    }
+
+    func testDraggedOriginDoesNotAccumulateAcrossSteps() {
+        let anchor = NSPoint(x: 0, y: 0)
+        let start = NSPoint(x: 100, y: 100)
+        // 分很多小步走完 240 点，终点必须还是 240 点（不能像积分那样越走越远）。
+        var current = start
+        var last = anchor
+        for _ in 0..<40 {
+            current.x += 6
+            last = PetController.draggedOrigin(anchor: anchor, start: start, current: current)
+        }
+        XCTAssertEqual(last.x, 240, accuracy: 0.001)
+        XCTAssertEqual(last.y, 0, accuracy: 0.001)
+    }
+}
+
+/// 新增的那批片段：吃的、时节、自己玩。
+@MainActor
+final class PetClipCatalogTests: XCTestCase {
+    func testEveryClipHasACaseForItsFile() {
+        // 枚举和 scripts/pet-clips.sh 的表是两处手写的，最容易只改一边。
+        let expected = Set(PetClip.allCases.map(\.resourceName))
+        XCTAssertEqual(expected.count, PetClip.allCases.count, "片段名不能重复")
+        XCTAssertGreaterThanOrEqual(expected.count, 50)
+    }
+
+    func testEatAndPlayClipsAreAllOneShot() {
+        for clip in PetClip.eatClips + PetClip.playClips {
+            XCTAssertFalse(clip.loops, "\(clip) 是一次性动作，不该循环")
+        }
+    }
+
+    func testSeasonalPicksSomethingForEveryMonth() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        for month in 1...12 {
+            let date = calendar.date(from: DateComponents(year: 2026, month: month, day: 15))!
+            XCTAssertNotNil(PetClip.seasonal(for: date), "\(month) 月没有应景片段")
+        }
+    }
+
+    func testSeasonalHighlights() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        func clip(_ month: Int, _ day: Int) -> PetClip? {
+            PetClip.seasonal(for: calendar.date(from: DateComponents(year: 2026, month: month, day: day))!)
+        }
+        XCTAssertEqual(clip(10, 1), .mooncake)
+        XCTAssertEqual(clip(12, 20), .christmasTree)
+        XCTAssertEqual(clip(10, 28), .pumpkin)
+        XCTAssertEqual(clip(6, 10), .eatZongzi)
+    }
+}

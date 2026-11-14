@@ -18,6 +18,8 @@ final class PetController {
     private var hostingView: NSHostingView<PetRootView>?
 
     private var dragAnchor: NSPoint?
+    /// 按下那一刻的鼠标位置（屏幕坐标）。拖拽全程用它算位移。
+    private var dragStartMouse = NSPoint.zero
     private var samples: [(time: TimeInterval, point: NSPoint)] = []
     private var velocity = CGVector.zero
     private var physicsTask: Task<Void, Never>?
@@ -31,6 +33,8 @@ final class PetController {
     private(set) var animates = true
     /// 用视频动作（插件那套逐帧动画）还是立绘合成。视频更像真动画，但也更费电。
     private(set) var videoEnabled = true
+    /// 点她的时候有没有那声「啾」。
+    private(set) var soundEnabled = true
     private(set) var isVisible = false
 
     private var size: NSSize {
@@ -41,6 +45,20 @@ final class PetController {
     }
 
     private init() {}
+
+    /// 关掉整棵图层树的隐式动画。
+    nonisolated static func disableImplicitAnimations(on layer: CALayer?) {
+        guard let layer else { return }
+        layer.sublayers?.forEach { disableImplicitAnimations(on: $0) }
+        layer.actions = [
+            "position": NSNull(),
+            "bounds": NSNull(),
+            "contents": NSNull(),
+            "opacity": NSNull(),
+            "transform": NSNull(),
+            "sublayers": NSNull(),
+        ]
+    }
 
     // MARK: 显示
 
@@ -72,9 +90,15 @@ final class PetController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = false
+        // 窗口自己别做任何「出现/移动」动画，位置只由我们逐帧写。
+        panel.animationBehavior = .none
 
         let host = NSHostingView(rootView: PetRootView(scale: scale, animates: animates))
         host.frame = NSRect(origin: .zero, size: size)
+        host.wantsLayer = true
+        // 内容图层的隐式动画同样会「慢半拍」：窗口已经移到新位置，画面还在
+        // 从旧位置补间过来，就成了残影。这里彻底关掉。
+        Self.disableImplicitAnimations(on: host.layer)
         panel.contentView = host
 
         panel.orderFrontRegardless()
@@ -147,6 +171,13 @@ final class PetController {
         hostingView?.rootView = PetRootView(scale: scale, animates: on)
     }
 
+    func setSoundEnabled(_ on: Bool) {
+        guard on != soundEnabled else { return }
+        soundEnabled = on
+        defaults.set(on, forKey: "pet.sound")
+        if !on { clickSound?.stop() }
+    }
+
     func setVideoEnabled(_ on: Bool) {
         guard on != videoEnabled else { return }
         videoEnabled = on
@@ -177,17 +208,31 @@ final class PetController {
         stopGlide()
         stopPhysics()
         dragAnchor = panel.frame.origin
+        dragStartMouse = NSEvent.mouseLocation
         samples = [(CACurrentMediaTime(), panel.frame.origin)]
         velocity = .zero
         PetModel.shared.setDragging(true)
         NSCursor.closedHand.set()
     }
 
-    func drag(translation: CGSize) {
-        guard let panel, let anchor = dragAnchor else { return }
-        // SwiftUI 的 y 轴向下，窗口的向上，所以要取负。
-        let origin = NSPoint(x: anchor.x + translation.width, y: anchor.y - translation.height)
-        panel.setFrameOrigin(origin)
+    /// 拖动时窗口该在哪。
+    ///
+    /// 不看 SwiftUI 给的 `translation`：那是视图坐标系里的位移，视图被
+    /// `scaleEffect` 缩过就跟着缩，窗口一移动坐标系又跟着跑——两笔误差叠起来
+    /// 就是主人看到的「飘」。这里只认屏幕坐标的差值，位移永远等于鼠标位移。
+    nonisolated static func draggedOrigin(anchor: NSPoint, start: NSPoint, current: NSPoint) -> NSPoint {
+        NSPoint(x: anchor.x + (current.x - start.x), y: anchor.y + (current.y - start.y))
+    }
+
+    func drag(translation _: CGSize) {
+        drag(toScreenPoint: NSEvent.mouseLocation)
+    }
+
+    /// 拖到鼠标所在的屏幕坐标（测试里可以喂假坐标）。
+    func drag(toScreenPoint point: NSPoint) {
+        guard dragAnchor != nil else { return }
+        let origin = Self.draggedOrigin(anchor: dragAnchor!, start: dragStartMouse, current: point)
+        movePanel(to: origin)
 
         let now = CACurrentMediaTime()
         samples.append((now, origin))
@@ -196,6 +241,17 @@ final class PetController {
         if samples.count > 32 {
             samples.removeFirst(samples.count - 32)
         }
+    }
+
+    /// 移动窗口。必须关掉隐式动画——快速拖动时窗口框会「慢慢追上来」，
+    /// 画面就拖在窗口后面，看起来像残影。
+    private func movePanel(to origin: NSPoint) {
+        guard let panel else { return }
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        NSAnimationContext.current.allowsImplicitAnimation = false
+        panel.setFrameOrigin(origin)
+        NSAnimationContext.endGrouping()
     }
 
     func endDrag() {
@@ -212,7 +268,7 @@ final class PetController {
             startPhysics()
         } else {
             let origin = PetPhysics.clamp(panel.frame.origin, size: size, bounds: activeBounds(for: panel.frame))
-            panel.setFrameOrigin(origin)
+            movePanel(to: origin)
             saveOrigin(origin)
         }
     }
@@ -266,8 +322,8 @@ final class PetController {
                 let eased = progress < 0.5
                     ? 2 * progress * progress
                     : 1 - 2 * (1 - progress) * (1 - progress)
-                panel.setFrameOrigin(
-                    NSPoint(x: start.x + (targetX - start.x) * CGFloat(eased), y: start.y)
+                self?.movePanel(
+                    to: NSPoint(x: start.x + (targetX - start.x) * CGFloat(eased), y: start.y)
                 )
                 if progress >= 1 { break }
                 try? await Task.sleep(for: .milliseconds(16))
@@ -311,7 +367,7 @@ final class PetController {
                 var body = PetBody(origin: panel.frame.origin, velocity: self.velocity)
                 let bounds = self.activeBounds(for: panel.frame)
                 let result = PetPhysics.step(&body, size: self.size, bounds: bounds, dt: dt)
-                panel.setFrameOrigin(body.origin)
+                self.movePanel(to: body.origin)
                 self.velocity = body.velocity
 
                 if result.impact > 320 {
@@ -356,6 +412,7 @@ final class PetController {
         scale = CGFloat(defaults.object(forKey: "pet.scale") as? Double ?? 1)
         animates = defaults.object(forKey: "pet.animate") as? Bool ?? true
         videoEnabled = defaults.object(forKey: "pet.video") as? Bool ?? true
+        soundEnabled = defaults.object(forKey: "pet.sound") as? Bool ?? true
         if let saved = defaults.string(forKey: "pet.origin") {
             let point = NSPointFromString(saved)
             if isOnScreen(point) {
@@ -389,8 +446,24 @@ final class PetController {
     }
 
     func speak() {
+        playClickSound()
         PetModel.shared.poke()
     }
+
+    /// 点一下的音效。素材是插件里那只小黄鸭的「啾」，音量压得很低——
+    /// 菜单栏软件在后台突然大声叫是很讨厌的事。
+    func playClickSound() {
+        guard soundEnabled, let sound = clickSound else { return }
+        if sound.isPlaying { sound.stop() }
+        sound.play()
+    }
+
+    private lazy var clickSound: NSSound? = {
+        guard let url = Bundle.main.url(forResource: "click", withExtension: "wav") else { return nil }
+        let sound = NSSound(contentsOf: url, byReference: true)
+        sound?.volume = 0.3
+        return sound
+    }()
 
     func nap() {
         PetModel.shared.nap()

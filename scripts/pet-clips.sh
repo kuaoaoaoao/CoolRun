@@ -64,6 +64,38 @@ CLIPS=(
     "stretch:超大伸懒腰:once"
     "startled:被吓一跳:once"
     "whale:蓝鲸现世:once"
+
+    # 吃什么（点她的时候偶尔抽到，或者吃完饭）
+    "eatTangyuan:吃汤圆:once"
+    "eatZongzi:吃粽子:once"
+    "eatWatermelon:吃西瓜:once"
+    "eatIceCream:吃冰淇淋融化:once"
+    "eatHotpot:涮火锅:once"
+    "eatTanghulu:吃糖葫芦:once"
+    "eatDumpling:吃饺子:once"
+    "eatNianGao:吃年糕:once"
+
+    # 时节（按日期自动挑，见 PetClip.seasonal(for:)）
+    "mooncake:中秋赏月吃月饼:once"
+    "snowman:堆雪人:once"
+    "christmasTree:装点圣诞树:once"
+    "pumpkin:讨糖南瓜灯:once"
+    "fu:写福字:once"
+    "redPacket:收红包:once"
+    "skyLantern:放孔明灯:once"
+    "leaves:被落叶淹没:once"
+
+    # 碎碎念
+    "daydream:碎碎念-发呆碎碎念:once"
+    "screenTalk:碎碎念-对屏碎碎念:once"
+    "wipeTable:碎碎念-擦桌碎碎念:once"
+
+    # 自己玩
+    "cat:撸猫:once"
+    "code:写代码:once"
+    "ghost:萌化小幽灵:once"
+    "bubbles:鲸鱼吐泡泡特效:once"
+    "tailSlam:用鲸鱼尾巴拍打地面:once"
 )
 
 if [ "${1:-}" = "--list" ]; then
@@ -89,10 +121,14 @@ for row in "${CLIPS[@]}"; do
         continue
     fi
     # -c:v libvpx-vp9 是必须的：默认解码器会把 alpha 丢掉，出来是黑底。
+    #
+    # 参数是照体积挑的：每段都固定 10 秒，q=50/24fps/alpha 0.8 一段要 650 KB，
+    # 50 段就 32 MB。卡通形象降到 20fps、alpha 0.6、q=45 只掉一点点观感，
+    # 体积却能省一半（实测同一段 613 KB → 340 KB）。
     ffmpeg -y -v error \
         -c:v libvpx-vp9 -i "$src" \
-        -vf "crop=336:300:152:30,format=yuva420p" \
-        -c:v hevc_videotoolbox -alpha_quality 0.8 -q:v 50 \
+        -vf "crop=336:300:152:30,fps=20,format=yuva420p" \
+        -c:v hevc_videotoolbox -alpha_quality 0.6 -q:v 45 \
         -tag:v hvc1 -pix_fmt yuva420p -an \
         "$dst"
     printf '%-14s %6s KB\n' "$key" "$(( $(stat -f%z "$dst") / 1024 ))"

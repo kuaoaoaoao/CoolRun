@@ -507,10 +507,30 @@ final class PetModel {
         case ..<72: play(.nod)
         case ..<77: play(.peek)
         case ..<82: play(.yawn)
-        case ..<88: play(.spin)
-        case ..<94: wander()
+        case ..<86: play(.spin)
+        case ..<91: wander()
+        case ..<95: playSpecialClip()
         default: play(.dash(CGFloat.random(in: -1...1)))
         }
+    }
+
+    /// 抽一段「有内容」的片段：应景的时节动画、吃东西、或者自己玩。
+    ///
+    /// 这类片段都是 10 秒的一次性动作，比点头歪头长得多，所以权重压得很低
+    /// （只在 5% 的空闲抽签里出现），不然她会一直忙着吃。
+    private func playSpecialClip() {
+        let seasonal = PetClip.seasonal(for: Date())
+        let roll = Int.random(in: 0..<10)
+        let clip: PetClip?
+        if let seasonal, roll < 4 {
+            clip = seasonal
+        } else if roll < 7 {
+            clip = PetClip.eatClips.randomElement()
+        } else {
+            clip = PetClip.playClips.randomElement()
+        }
+        guard let clip, clip.isBundled else { return }
+        playClip(clip, seconds: PetClip.typicalDuration)
     }
 
     /// 在屏幕上溜达一段：动作交给窗口，身体顺带做个前冲。

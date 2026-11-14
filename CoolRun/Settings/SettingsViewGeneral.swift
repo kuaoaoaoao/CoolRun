@@ -194,6 +194,15 @@ extension SettingsView {
                         )
                     )
                     Divider().padding(.horizontal, 14)
+                    MonitorToggleRow(
+                        icon: "speaker.wave.2",
+                        title: "点击音效",
+                        isOn: Binding(
+                            get: { PetController.shared.soundEnabled },
+                            set: { PetController.shared.setSoundEnabled($0) }
+                        )
+                    )
+                    Divider().padding(.horizontal, 14)
                     HStack(spacing: 10) {
                         Text("大小")
                             .font(.system(size: 12))
