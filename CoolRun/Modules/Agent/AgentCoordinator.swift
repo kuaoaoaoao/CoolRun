@@ -245,11 +245,13 @@ final class AgentCoordinator {
             guard let self else { return }
 
             if descriptor.permission >= .persistent {
-                let approved = await self.requestApproval(descriptor, arguments)
-                guard approved else {
+                switch await self.requestApproval(descriptor, arguments) {
+                case .approved:
+                    break
+                case .denied(let reason):
                     self.isRunning = false
                     self.runTask = nil
-                    self.appendNotice("已取消：\(name)")
+                    self.appendNotice("已取消：\(name)（\(reason)）")
                     return
                 }
             }
@@ -269,7 +271,7 @@ final class AgentCoordinator {
             let result = await ToolRegistry.shared.execute(
                 name: name,
                 arguments: arguments,
-                policy: .init(maxLevel: allowed, approval: { _, _ in true })
+                policy: .init(maxLevel: allowed, approval: { _, _ in .approved })
             )
             let elapsed = Date().timeIntervalSince(started)
 
@@ -343,14 +345,23 @@ final class AgentCoordinator {
     func requestApproval(
         _ descriptor: ToolDescriptor,
         _ arguments: JSONValue
-    ) async -> Bool {
+    ) async -> ApprovalDecision {
+        // 确认条是画在对话界面里的。面板没开着就没人能点，与其让两边一起
+        // 干等（我们 90 秒、DSH 60 秒），不如立刻拒绝并说清原因。
+        guard AgentApprovalGate.shared.isChatVisible else {
+            return .denied(
+                "现在没有可见的对话窗口，无法弹出确认。请先打开 CoolRun 的 AI 面板，"
+                + "再让我做需要写入的操作；或者改用只读的方式回答。"
+            )
+        }
+
         let request = AgentApprovalRequest(
             id: UUID().uuidString,
             toolName: descriptor.name,
             summary: descriptor.summary,
             argumentsText: arguments.prettyJSONString()
         )
-        return await withCheckedContinuation { continuation in
+        let approved = await withCheckedContinuation { continuation in
             approvalContinuation = continuation
             pendingApproval = request
 
@@ -361,6 +372,7 @@ final class AgentCoordinator {
                 self.resolveApproval(false)
             }
         }
+        return approved ? .approved : .userDeclined
     }
 
     // MARK: - 私有
@@ -378,7 +390,7 @@ final class AgentCoordinator {
         case .native:
             let native = SwiftAgentEngine()
             native.approvalHandler = { [weak self] descriptor, arguments in
-                guard let self else { return false }
+                guard let self else { return .userDeclined }
                 return await self.requestApproval(descriptor, arguments)
             }
             created = native

@@ -152,6 +152,15 @@ final class CoolRunMCPHost {
     }
 
     private func handle(_ request: HTTPRequest, on connection: NWConnection) async {
+        // 纵深防御：只接受「本地客户端」的请求。
+        // token 已经能挡住没凭据的人，但浏览器里的任意网页都能往
+        // 127.0.0.1 发请求（还会自动带 Origin），DNS rebinding 也能把
+        // evil.com 指到这里。这两道检查成本几乎为零，先挡在前面。
+        if let rejection = Self.requestRejectionReason(request) {
+            respond(connection, status: 403, body: ["error": rejection])
+            return
+        }
+
         // 鉴权：除了 health，全部要求 Bearer token。
         if request.path != "/health" {
             let expected = "Bearer \(token ?? "")"
@@ -190,6 +199,43 @@ final class CoolRunMCPHost {
             errorCode: result.errorCode,
             errorMessage: result.errorMessage
         )
+    }
+
+    // MARK: 请求来源校验
+
+    /// 返回 nil 表示放行，否则是要写进 403 响应的原因。
+    ///
+    /// 规则刻意简单：
+    /// - 带 `Origin` 头的一律拒绝。本地 MCP 客户端（DSH、curl）不会发这个头，
+    ///   会发的只有浏览器——那正是我们要挡的。
+    /// - `Host` 必须是 127.0.0.1 / localhost / [::1]，且端口对得上。
+    ///   防的是 DNS rebinding：攻击者让 evil.com 解析到 127.0.0.1 后，
+    ///   浏览器发出的 Host 仍然是 evil.com。
+    nonisolated static func requestRejectionReason(_ request: HTTPRequest) -> String? {
+        if request.headers["origin"] != nil {
+            return "cross-origin requests are not allowed"
+        }
+
+        guard let host = request.headers["host"]?.lowercased(), !host.isEmpty else {
+            return "missing Host header"
+        }
+
+        // 去掉端口后再比对；IPv6 字面量形如 [::1]:1234。
+        let hostOnly: String
+        if host.hasPrefix("[") {
+            guard let closing = host.firstIndex(of: "]") else { return "invalid Host header" }
+            hostOnly = String(host[host.startIndex...closing])
+        } else if let colon = host.lastIndex(of: ":") {
+            hostOnly = String(host[host.startIndex..<colon])
+        } else {
+            hostOnly = host
+        }
+
+        let allowed: Set<String> = ["127.0.0.1", "localhost", "[::1]"]
+        guard allowed.contains(hostOnly) else {
+            return "unexpected Host header"
+        }
+        return nil
     }
 
     // MARK: JSON-RPC

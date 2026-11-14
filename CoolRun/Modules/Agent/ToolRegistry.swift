@@ -27,6 +27,17 @@ enum ToolPermission: Int, Comparable, CaseIterable, Codable, Sendable {
     }
 }
 
+/// 确认结果。带上拒绝原因，模型才知道下一步该怎么走——
+/// 只说「被拒绝」它往往会原样再试一遍。
+enum ApprovalDecision: Sendable, Equatable {
+    case approved
+    case denied(String)
+
+    nonisolated static let userDeclined = ApprovalDecision.denied(
+        "用户拒绝了这次操作。请改用不需要写入的方式，或先向用户说明意图再试。"
+    )
+}
+
 // MARK: - 工具描述
 
 struct ToolDescriptor: Sendable, Identifiable {
@@ -201,8 +212,21 @@ final class ToolRegistry {
         /// 没显式给策略时按最保守处理：只放行只读工具。
         /// 这样将来新增的调用点忘了传策略，也不会意外获得写权限。
         var maxLevel: ToolPermission = .read
-        var approval: (@MainActor (ToolDescriptor, JSONValue) async -> Bool)?
+        var approval: (@MainActor (ToolDescriptor, JSONValue) async -> ApprovalDecision)?
         var timeout: Duration? = .seconds(60)
+
+        /// 显式声明 nonisolated：默认参数在非隔离上下文求值，
+        /// 而 `approval` 的类型带 `@MainActor`，编译器会把默认初始化器也当成
+        /// MainActor 隔离的，于是 `policy: .init()` 这种写法会报警告。
+        nonisolated init(
+            maxLevel: ToolPermission = .read,
+            approval: (@MainActor (ToolDescriptor, JSONValue) async -> ApprovalDecision)? = nil,
+            timeout: Duration? = .seconds(60)
+        ) {
+            self.maxLevel = maxLevel
+            self.approval = approval
+            self.timeout = timeout
+        }
     }
 
     func execute(
@@ -242,8 +266,11 @@ final class ToolRegistry {
             guard let approval = policy.approval else {
                 return deny("\(name) 会写入持久数据，需要用户确认，但当前通道没有确认界面。")
             }
-            guard await approval(descriptor, arguments) else {
-                return deny("用户拒绝了这次操作。请改用不需要写入的方式，或先向用户说明意图。")
+            switch await approval(descriptor, arguments) {
+            case .approved:
+                break
+            case .denied(let reason):
+                return deny(reason)
             }
         }
 

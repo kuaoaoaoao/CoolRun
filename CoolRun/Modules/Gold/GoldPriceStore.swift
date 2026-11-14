@@ -26,6 +26,10 @@ final class GoldPriceStore {
     @ObservationIgnored private let decoder = JSONDecoder()
     @ObservationIgnored private let maxRecords = 100_000
     @ObservationIgnored private let saveDebounceInterval: Duration = .seconds(8)
+    @ObservationIgnored private var historyLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var didBackUpThisLaunch = false
+    /// 历史还在后台解码时为 true，供空态区分「正在读历史」与「真的没数据」。
+    private(set) var isLoadingHistory = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var hasPendingSave = false
     @ObservationIgnored private var saveGeneration = 0
@@ -35,7 +39,7 @@ final class GoldPriceStore {
 
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
-        loadFromDisk()
+        startHistoryLoad()
     }
 
     func addPrice(_ price: Double, timestamp: Date = Date(), source: String = "CZB-JCJ") {
@@ -230,27 +234,72 @@ final class GoldPriceStore {
         }
     }
 
-    private func loadFromDisk() {
+    /// 历史文件实测 7.8 MB / 7 万条，在主线程解码要 115 ms —— 正好卡在
+    /// 首次打开金价面板的路径上。改成后台解码，解完再回主线程合并。
+    private func startHistoryLoad() {
         let sources = GoldDataStorage.readableFileURLs(named: fileURL.lastPathComponent)
-        var recordsByID: [UUID: GoldPriceRecord] = [:]
-        for source in sources {
-            guard let data = try? Data(contentsOf: source),
-                  let sourceRecords = try? decoder.decode([GoldPriceRecord].self, from: data) else { continue }
-            for record in sourceRecords {
-                recordsByID[record.id] = record
+        guard !sources.isEmpty else { return }
+
+        isLoadingHistory = true
+        let limit = maxRecords
+        historyLoadTask = Task { [weak self] in
+            let loaded = await Self.decodeHistory(from: sources, limit: limit)
+            guard !Task.isCancelled, let self else { return }
+            self.applyLoadedHistory(loaded, sources: sources)
+        }
+    }
+
+    private nonisolated static func decodeHistory(
+        from sources: [URL],
+        limit: Int
+    ) async -> [GoldPriceRecord] {
+        await Task.detached(priority: .utility) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+
+            var recordsByID: [UUID: GoldPriceRecord] = [:]
+            for source in sources {
+                guard let data = try? Data(contentsOf: source),
+                      let sourceRecords = try? decoder.decode([GoldPriceRecord].self, from: data)
+                else { continue }
+                for record in sourceRecords {
+                    recordsByID[record.id] = record
+                }
             }
-        }
 
-        records = recordsByID.values.sorted { $0.timestamp < $1.timestamp }
-        if records.count > maxRecords {
-            records.removeFirst(records.count - maxRecords)
-        }
-        lastPriceUpdate = records.last?.timestamp
+            var merged = recordsByID.values.sorted { $0.timestamp < $1.timestamp }
+            if merged.count > limit {
+                merged.removeFirst(merged.count - limit)
+            }
+            return merged
+        }.value
+    }
 
-        // Persist the merged result in the current location so future launches
-        // no longer depend on the legacy sandbox container.
-        if !records.isEmpty, sources.contains(where: { $0.standardizedFileURL != fileURL.standardizedFileURL }) {
+    private func applyLoadedHistory(_ loaded: [GoldPriceRecord], sources: [URL]) {
+        isLoadingHistory = false
+        historyLoadTask = nil
+        guard !loaded.isEmpty else { return }
+
+        // 解码期间可能已经抓到新行情：同 id 以内存里的为准，其余照旧合并。
+        var recordsByID: [UUID: GoldPriceRecord] = [:]
+        for record in loaded { recordsByID[record.id] = record }
+        for record in records { recordsByID[record.id] = record }
+
+        var merged = recordsByID.values.sorted { $0.timestamp < $1.timestamp }
+        if merged.count > maxRecords {
+            merged.removeFirst(merged.count - maxRecords)
+        }
+        records = merged
+        lastPriceUpdate = merged.last?.timestamp
+
+        // 把合并结果写回当前位置，以后启动就不再依赖旧的沙箱容器。
+        if sources.contains(where: { $0.standardizedFileURL != fileURL.standardizedFileURL }) {
             saveToDisk(records: records, to: fileURL)
+        }
+
+        // 解码期间攒下的待保存请求，现在数据齐了再落。
+        if hasPendingSave {
+            scheduleSave()
         }
     }
 
@@ -263,6 +312,13 @@ final class GoldPriceStore {
     }
 
     private func scheduleSave() {
+        // 历史还在后台解码时内存里只有刚抓到的几条。这时候落盘会把整个
+        // 历史文件覆盖成「一条」——曾经真的这么丢过一次数据。
+        guard !isLoadingHistory else {
+            hasPendingSave = true
+            return
+        }
+
         hasPendingSave = true
         saveGeneration += 1
         let generation = saveGeneration
@@ -290,7 +346,33 @@ final class GoldPriceStore {
 
     private func saveToDisk(records: [GoldPriceRecord], to fileURL: URL) {
         guard let data = try? encoder.encode(records) else { return }
+        guard !Self.wouldShrinkTooMuch(existing: fileURL, newByteCount: data.count) else {
+            // 宁可这次不写，也不要把历史覆盖成残片。
+            return
+        }
+        backUpOnceBeforeOverwriting(fileURL)
         try? data.write(to: fileURL, options: .atomic)
+    }
+
+    /// 每次启动只备份一次，避免每 8 秒复制一个几 MB 的文件。
+    private func backUpOnceBeforeOverwriting(_ url: URL) {
+        guard !didBackUpThisLaunch else { return }
+        didBackUpThisLaunch = true
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let bytes = attributes[.size] as? Int,
+              bytes > 256 * 1024 else { return }
+        let backup = url.deletingPathExtension().appendingPathExtension("json.bak")
+        try? FileManager.default.removeItem(at: backup)
+        try? FileManager.default.copyItem(at: url, to: backup)
+    }
+
+    /// 已有文件明显更大时，说明这次要写的是一份不完整的快照。
+    /// 用字节数比较（不解析），成本几乎为零。
+    nonisolated static func wouldShrinkTooMuch(existing url: URL, newByteCount: Int) -> Bool {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? Int,
+              size > 64 * 1024 else { return false }
+        return newByteCount * 3 < size
     }
 
     private nonisolated static func writeToDisk(records: [GoldPriceRecord], fileURL: URL) async {
@@ -298,6 +380,7 @@ final class GoldPriceStore {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             guard let data = try? encoder.encode(records) else { return }
+            guard !Self.wouldShrinkTooMuch(existing: fileURL, newByteCount: data.count) else { return }
             try? data.write(to: fileURL, options: .atomic)
         }.value
     }

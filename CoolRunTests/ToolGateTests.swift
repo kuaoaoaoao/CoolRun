@@ -60,7 +60,7 @@ final class ToolGateTests: XCTestCase {
         let denied = await ToolRegistry.shared.execute(
             name: "test_persistent",
             arguments: .object([:]),
-            policy: .init(maxLevel: .persistent, approval: { _, _ in false })
+            policy: .init(maxLevel: .persistent, approval: { _, _ in .userDeclined })
         )
         XCTAssertTrue(denied.isError)
         XCTAssertFalse(didRun, "用户拒绝后不许执行")
@@ -68,7 +68,7 @@ final class ToolGateTests: XCTestCase {
         let approved = await ToolRegistry.shared.execute(
             name: "test_persistent",
             arguments: .object([:]),
-            policy: .init(maxLevel: .persistent, approval: { _, _ in true })
+            policy: .init(maxLevel: .persistent, approval: { _, _ in .approved })
         )
         XCTAssertFalse(approved.isError)
         XCTAssertTrue(didRun)
@@ -103,6 +103,24 @@ final class ToolGateTests: XCTestCase {
         XCTAssertTrue(result.isError)
         XCTAssertTrue(result.content.contains("超时"), result.content)
         XCTAssertLessThan(Date().timeIntervalSince(started), 0.5, "超时后必须立刻返回")
+    }
+
+    /// 面板关着的时候没有人能点确认，必须立刻拒绝并说清原因，
+    /// 而不是让 DSH 那边干等到 60 秒工具超时、模型只看到「超时」。
+    func testApprovalFailsFastWhenNoChatWindowIsVisible() async {
+        AgentApprovalGate.shared.setChatVisible(false)
+        let descriptor = makeDescriptor("gate_probe", .persistent)
+
+        let started = Date()
+        let decision = await AgentCoordinator.shared.requestApproval(descriptor, .object([:]))
+        let elapsed = Date().timeIntervalSince(started)
+
+        XCTAssertLessThan(elapsed, 0.5, "没有确认界面时不应该挂起等待")
+        guard case .denied(let reason) = decision else {
+            return XCTFail("应当直接拒绝，实际是 \(decision)")
+        }
+        XCTAssertTrue(reason.contains("对话窗口"), reason)
+        XCTAssertNil(AgentCoordinator.shared.pendingApproval)
     }
 
     func testUnknownToolIsRejected() async {

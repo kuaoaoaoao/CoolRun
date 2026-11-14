@@ -54,7 +54,7 @@ final class AgentActionToolsTests: XCTestCase {
         await ToolRegistry.shared.execute(
             name: name,
             arguments: arguments,
-            policy: .init(maxLevel: .dangerous, approval: { _, _ in true })
+            policy: .init(maxLevel: .dangerous, approval: { _, _ in .approved })
         )
     }
 
@@ -107,7 +107,7 @@ final class AgentActionToolsTests: XCTestCase {
         var invoked = false
         engine.approvalHandler = { _, _ in
             invoked = true
-            return false
+            return .userDeclined
         }
         XCTAssertNotNil(engine.approvalHandler)
         XCTAssertFalse(invoked)

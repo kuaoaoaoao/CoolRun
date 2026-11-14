@@ -27,6 +27,12 @@ struct AgentChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            WindowVisibilityReader { visible in
+                AgentApprovalGate.shared.setChatVisible(visible)
+            }
+            .frame(width: 0, height: 0)
+        )
         .onChange(of: coordinator.draft) { _, draft in
             // 搜索面板选了「需要补一句话」的场景卡：把提示词放进输入框，光标停在末尾。
             guard let draft else { return }

@@ -14,9 +14,9 @@ final class SwiftAgentEngine: AgentEngine {
     private var currentTask: Task<Void, Never>?
     private var cancelled = false
 
-    /// 引擎在调用 L2（持久写）及以上工具前会走这个回调，返回 false 表示用户拒绝。
+    /// 引擎在调用 L2（持久写）及以上工具前会走这个回调。
     /// 由 `AgentCoordinator` 注入，UI 负责真正弹出确认。
-    var approvalHandler: (@MainActor (ToolDescriptor, JSONValue) async -> Bool)?
+    var approvalHandler: (@MainActor (ToolDescriptor, JSONValue) async -> ApprovalDecision)?
 
     /// 单条工具结果回灌给模型时的最大字符数，避免一次读文件把上下文撑爆。
     private static let toolResultLimit = 12_000
