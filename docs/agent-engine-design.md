@@ -560,6 +560,18 @@ CoolRun.app/Contents/
 
 ---
 
+### 金价历史的读取与落盘
+
+`GoldPriceStore` 的历史文件有 7 万条、7 MB 量级，主线程解码实测 115 ms，正好卡在首次打开面板的路径上。
+现在解码走 `Task.detached(priority: .utility)`，解完回主线程按 id 合并（解码期间新抓的行情以内存为准）。
+
+落盘有两条硬保护，都是踩过坑之后加的：
+
+- 历史还在解码时 `scheduleSave()` 直接返回，只记 `hasPendingSave`；解码完再补一次。
+  否则启动瞬间内存里只有刚抓到的一条，8 秒防抖一到就把整个历史覆盖成一条。
+- `wouldShrinkTooMuch(existing:newByteCount:)`：新数据字节数不足盘上文件的三分之一时拒绝写入。
+  每次启动第一次落盘前还会留一份 `gold_price_history.json.bak`。
+
 ## 11. P0 落地记录（已完成）
 
 P0 全部代码已合入 `CoolRun/Modules/Agent/`，`xcodebuild build` 零错误零警告，单元测试通过。
