@@ -41,7 +41,9 @@ struct WhalePetView: View {
     nonisolated static let baseSize = CGSize(width: 196, height: 200)
 
     /// 视频片段的原始画布（`scripts/pet-clips.sh` 里裁的尺寸）。
-    nonisolated static let clipCanvas = CGSize(width: 336, height: 300)
+    /// 视频画布：插件原画布 640×360，只裁掉左右和下方多余的空白，
+    /// 上下都留出余量——曾经裁得太紧，角色的脚被切在画面底边上看不见。
+    nonisolated static let clipCanvas = CGSize(width: 360, height: 340)
 
     /// 把片段等比塞进画布后的显示尺寸。
     nonisolated static var clipDisplaySize: CGSize {
@@ -120,7 +122,8 @@ struct WhalePetView: View {
                     onUnavailable: { model.markVideoUnavailable() }
                 )
                 .frame(width: Self.clipDisplaySize.width, height: Self.clipDisplaySize.height)
-                .offset(y: Self.baseSize.height - Self.clipDisplaySize.height)
+                // 再往上抬 2 点：贴着窗口底边画，脚会被窗口边界切掉一点点。
+                .offset(y: Self.baseSize.height - Self.clipDisplaySize.height - 2)
                 .allowsHitTesting(false)
             } else {
                 character(pose: pose)

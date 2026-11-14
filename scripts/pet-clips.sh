@@ -106,6 +106,9 @@ if [ "${1:-}" = "--list" ]; then
     exit 0
 fi
 
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
+
 mkdir -p "$OUT"
 total_before=$(du -sk "$OUT" 2>/dev/null | cut -f1 || echo 0)
 
@@ -117,7 +120,7 @@ for row in "${CLIPS[@]}"; do
         echo "跳过 $key：缺 $zh.webm" >&2
         continue
     fi
-    if [ -f "$dst" ] && [ "$dst" -nt "$src" ]; then
+    if [ "$FORCE" -eq 0 ] && [ -f "$dst" ] && [ "$dst" -nt "$src" ]; then
         continue
     fi
     # -c:v libvpx-vp9 是必须的：默认解码器会把 alpha 丢掉，出来是黑底。
@@ -127,7 +130,7 @@ for row in "${CLIPS[@]}"; do
     # 体积却能省一半（实测同一段 613 KB → 340 KB）。
     ffmpeg -y -v error \
         -c:v libvpx-vp9 -i "$src" \
-        -vf "crop=336:300:152:30,fps=20,format=yuva420p" \
+        -vf "crop=360:340:140:0,fps=20,format=yuva420p" \
         -c:v hevc_videotoolbox -alpha_quality 0.6 -q:v 45 \
         -tag:v hvc1 -pix_fmt yuva420p -an \
         "$dst"
