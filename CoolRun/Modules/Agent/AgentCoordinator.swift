@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - 工具活动
 
@@ -33,6 +34,8 @@ struct AgentApprovalRequest: Identifiable, Equatable, Sendable {
 @Observable
 final class AgentCoordinator {
     static let shared = AgentCoordinator()
+
+    private static let logger = Logger(subsystem: "com.coolrun.agent", category: "coordinator")
 
     private(set) var isRunning = false
     private(set) var streamingText = ""
@@ -178,11 +181,18 @@ final class AgentCoordinator {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
             guard let config = try? AgentSettings.shared.makeConfig() else { return }
-            _ = try? DSHAgentEngine.writePatch(
-                config: config,
-                endpoint: CoolRunMCPHost.shared.endpoint,
-                token: CoolRunMCPHost.shared.token
-            )
+            // 这份 patch 决定 DSH 用哪个 provider、连哪个 MCP 端口。写失败的话
+            // 引擎会用默认配置起来，表现成「模型不认 key」——所以不能静默。
+            do {
+                _ = try DSHAgentEngine.writePatch(
+                    config: config,
+                    endpoint: CoolRunMCPHost.shared.endpoint,
+                    token: CoolRunMCPHost.shared.token
+                )
+            } catch {
+                Self.logger.error("DSH patch 写入失败：\(error.localizedDescription, privacy: .public)")
+                self.errorMessage = "DSH 运行时配置写入失败：\(error.localizedDescription)"
+            }
         }
     }
 

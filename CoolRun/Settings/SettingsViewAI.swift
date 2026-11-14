@@ -54,10 +54,10 @@ private struct AIPrivacyCard: View {
                 icon: "key",
                 text: LocalizedString.l(
                     language,
-                    en: "API keys live in the macOS Keychain, never in plain-text settings files.",
-                    zh: "API Key 保存在 macOS 钥匙串，不会写入明文配置文件。",
-                    ja: "APIキーはmacOSキーチェーンに保存され、平文の設定ファイルには書き込まれません。",
-                    ko: "API 키는 macOS 키체인에 저장되며 평문 설정 파일에 기록되지 않습니다."
+                    en: "API keys are encrypted with a key derived from this Mac's hardware ID and stored in a 0600 file — never in plain text. Copy that file to another Mac and it stays unreadable.",
+                    zh: "API Key 用本机硬件 ID 派生的密钥加密后存在权限 0600 的文件里，不会明文落盘；把文件拷到别的机器上也解不开。",
+                    ja: "APIキーは本機のハードウェアIDから派生した鍵で暗号化し、権限0600のファイルに保存します（平文では保存しません）。他のマシンへコピーしても復号できません。",
+                    ko: "API 키는 이 Mac의 하드웨어 ID에서 파생한 키로 암호화해 권한 0600 파일에 저장합니다(평문 저장 없음). 다른 Mac으로 복사해도 복호화되지 않습니다."
                 )
             ),
             PrivacyItem(

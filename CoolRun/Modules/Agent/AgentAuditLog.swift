@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - 审计日志
 
@@ -69,8 +70,16 @@ final class AgentAuditLog {
         entries = decoded
     }
 
+    /// 审计日志写不进去等于「出了事查不到」，所以失败要留下痕迹，
+    /// 不能像别处那样用 `try?` 吞掉。
     private func save() {
-        guard let data = try? encoder.encode(entries) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
+        do {
+            let data = try encoder.encode(entries)
+            try data.write(to: fileURL, options: [.atomic])
+        } catch {
+            Self.logger.error("审计日志写入失败：\(error.localizedDescription, privacy: .public)")
+        }
     }
+
+    private static let logger = Logger(subsystem: "com.coolrun.agent", category: "audit")
 }
