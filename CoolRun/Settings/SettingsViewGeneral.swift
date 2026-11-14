@@ -185,6 +185,15 @@ extension SettingsView {
                         )
                     )
                     Divider().padding(.horizontal, 14)
+                    MonitorToggleRow(
+                        icon: "film",
+                        title: "逐帧动画",
+                        isOn: Binding(
+                            get: { PetController.shared.videoEnabled },
+                            set: { PetController.shared.setVideoEnabled($0) }
+                        )
+                    )
+                    Divider().padding(.horizontal, 14)
                     HStack(spacing: 10) {
                         Text("大小")
                             .font(.system(size: 12))

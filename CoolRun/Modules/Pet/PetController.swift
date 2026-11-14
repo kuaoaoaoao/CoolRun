@@ -29,6 +29,8 @@ final class PetController {
     private(set) var scale: CGFloat = 1
     /// 是否播放待机动效。关掉能省一点电（实测约 2% CPU），代价是画面定格。
     private(set) var animates = true
+    /// 用视频动作（插件那套逐帧动画）还是立绘合成。视频更像真动画，但也更费电。
+    private(set) var videoEnabled = true
     private(set) var isVisible = false
 
     private var size: NSSize {
@@ -84,6 +86,8 @@ final class PetController {
             self?.glide(dx: dx)
         }
         PetModel.shared.animating = animates
+        PetModel.shared.videoEnabled = videoEnabled
+        PetModel.shared.videoPaused = false
         PetModel.shared.start()
 
         #if DEBUG
@@ -95,10 +99,27 @@ final class PetController {
                 self?.glide(dx: 220)
             }
         }
+
+        // 调试用：`COOLRUN_PET_CLIP_DEMO=1` 挨个放一遍片段，
+        // 方便截图核对每个动作到底有没有真的播出来。
+        if ProcessInfo.processInfo.environment["COOLRUN_PET_CLIP_DEMO"] != nil {
+            Task { @MainActor in
+                let script: [(PetClip, Double)] = [
+                    (.idle, 3), (.eatRice, 3), (.clickHappy, 3),
+                    (.workBusy, 3), (.sleepStart, 3), (.sleepLoop, 3), (.wake, 3),
+                ]
+                try? await Task.sleep(for: .seconds(1))
+                for (clip, seconds) in script {
+                    PetModel.shared.debugPlayClip(clip, seconds: seconds)
+                    try? await Task.sleep(for: .seconds(seconds))
+                }
+            }
+        }
         #endif
     }
 
     func hide() {
+        PetModel.shared.videoPaused = true
         stopGlide()
         stopPhysics()
         panel?.orderOut(nil)
@@ -124,6 +145,14 @@ final class PetController {
         defaults.set(on, forKey: "pet.animate")
         PetModel.shared.animating = on
         hostingView?.rootView = PetRootView(scale: scale, animates: on)
+    }
+
+    func setVideoEnabled(_ on: Bool) {
+        guard on != videoEnabled else { return }
+        videoEnabled = on
+        defaults.set(on, forKey: "pet.video")
+        PetModel.shared.videoEnabled = on
+        hostingView?.rootView = PetRootView(scale: scale, animates: animates)
     }
 
     func setScale(_ newScale: CGFloat) {
@@ -326,6 +355,7 @@ final class PetController {
     private func originForShow() -> NSPoint {
         scale = CGFloat(defaults.object(forKey: "pet.scale") as? Double ?? 1)
         animates = defaults.object(forKey: "pet.animate") as? Bool ?? true
+        videoEnabled = defaults.object(forKey: "pet.video") as? Bool ?? true
         if let saved = defaults.string(forKey: "pet.origin") {
             let point = NSPointFromString(saved)
             if isOnScreen(point) {

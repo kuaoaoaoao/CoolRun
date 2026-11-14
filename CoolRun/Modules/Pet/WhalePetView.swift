@@ -38,7 +38,16 @@ private struct PetShearModifier: ViewModifier {
 /// 三层各算各的，最后加成一个 `PetPose` 交给身体。
 struct WhalePetView: View {
     /// 立绘原始尺寸下画布多大。外框会按缩放放大。
-    nonisolated static let baseSize = CGSize(width: 168, height: 190)
+    nonisolated static let baseSize = CGSize(width: 196, height: 200)
+
+    /// 视频片段的原始画布（`scripts/pet-clips.sh` 里裁的尺寸）。
+    nonisolated static let clipCanvas = CGSize(width: 336, height: 300)
+
+    /// 把片段等比塞进画布后的显示尺寸。
+    nonisolated static var clipDisplaySize: CGSize {
+        let scale = min(baseSize.width / clipCanvas.width, baseSize.height / clipCanvas.height)
+        return CGSize(width: clipCanvas.width * scale, height: clipCanvas.height * scale)
+    }
 
     /// 关掉动效时画面定格（省电用），点击、拖动照常。
     var animated: Bool = true
@@ -67,6 +76,14 @@ struct WhalePetView: View {
             }
     }
 
+    /// 播视频还是画立绘。
+    ///
+    /// 关掉动效时退回立绘（静态定格更省电，视频没法「暂停在某一帧还好看」）；
+    /// 素材缺失或视频起不来时也退回立绘，不能白屏。
+    private var showsClip: Bool {
+        animated && model.videoEnabled && model.videoAvailable && model.clip.isBundled
+    }
+
     // MARK: 舞台
 
     private func stage(at time: TimeInterval, scheme: ColorScheme) -> some View {
@@ -88,11 +105,26 @@ struct WhalePetView: View {
         )
 
         return ZStack(alignment: .top) {
-            if !model.airborne {
+            // 视频片段自带落地阴影，再画一个会叠成两层。
+            if !model.airborne && !showsClip {
                 groundShadow(breath: breath, squash: squash)
             }
 
-            character(pose: pose)
+            if showsClip {
+                // 有素材就播插件那套视频——它本来就是这只鱼的逐帧动画，
+                // 比在单张立绘上做姿态变换自然得多。
+                PetVideoView(
+                    clip: model.clip,
+                    isPaused: !animated || model.videoPaused,
+                    onFinished: { model.clipDidFinish() },
+                    onUnavailable: { model.markVideoUnavailable() }
+                )
+                .frame(width: Self.clipDisplaySize.width, height: Self.clipDisplaySize.height)
+                .offset(y: Self.baseSize.height - Self.clipDisplaySize.height)
+                .allowsHitTesting(false)
+            } else {
+                character(pose: pose)
+            }
 
             if !model.effects.isEmpty {
                 effectsLayer(at: time, scheme: scheme)
@@ -124,7 +156,7 @@ struct WhalePetView: View {
             .frame(width: 104, height: 14)
             .scaleEffect(x: 1 - squash * 0.12, y: 1)
             .opacity(0.75 + 0.25 * (1 - abs(breath)))
-            .offset(y: 166)
+            .offset(y: 176)
     }
 
     // MARK: 角色

@@ -116,6 +116,25 @@ enum PetAction: Equatable, Sendable {
         }
     }
 
+    /// 这个动作对应哪段视频。没有对应素材的（比如只做了姿态变化的）返回 nil。
+    nonisolated var clip: PetClip? {
+        switch self {
+        case .none: nil
+        case .hop: .clickHappy
+        case .lookLeft, .lookRight, .peek: .lookAround
+        case .crouch: .clickShy
+        case .spin: .clickHappy
+        case .dash: .walkCrab
+        case .wiggle: .clickTickle
+        case .stretch: .stretch
+        case .shake: .startled
+        case .celebrate: .workCelebrate
+        case .faint: .workTired
+        case .yawn: .yawn
+        case .nod: .clickShy
+        }
+    }
+
     /// 这个动作怎么画。`none` 没有。
     nonisolated var motion: PetMotion? {
         switch self {
@@ -182,6 +201,34 @@ final class PetModel {
     /// 飘在头顶的小符号。视图按时钟画，这里只管生成和回收。
     private(set) var effects: [PetEffect] = []
 
+    /// 现在该播哪个片段。视图拿它去换视频。
+    ///
+    /// 优先级：被拎着 > 一次性动作 > 心情底片。素材来自 `dsh-pet` 插件，
+    /// 缺素材或者视频起不来的时候视图会退回立绘，这里照常算。
+    private(set) var clip: PetClip = .idle
+
+    /// 视频起不来（素材坏了 / 解码器不支持）时置 false，视图退回立绘。
+    private(set) var videoAvailable = true
+
+    /// 用户要不要用视频动作。关掉就走立绘合成，省一点电。
+    var videoEnabled = true
+
+    /// 窗口藏起来时把视频也停掉——不然藏在屏幕外还在解码，白烧电。
+    var videoPaused = false
+
+    /// 素材在不在 bundle 里。只在启动时查一次——`frameInterval` 每秒要问好几次，
+    /// 每次都去 `Bundle.main` 翻一遍不值得。
+    private let clipsBundled = PetClip.idle.isBundled
+
+    /// 这一刻画面是不是由视频层负责。
+    var usesVideo: Bool {
+        videoEnabled && videoAvailable && clipsBundled && clip.isBundled
+    }
+
+    /// 临时盖过心情的一次性片段（入睡、醒来这种不属于 `PetAction` 的）。
+    private var clipOverride: PetClip?
+    private var clipOverrideUntil = Date.distantPast
+
     /// 渲染时钟：视图读它触发重绘。
     ///
     /// 没用 `TimelineView(.periodic(by:))`——它的间隔只是「最早什么时候可以更新」，
@@ -205,6 +252,13 @@ final class PetModel {
     /// 也会把 CPU 从睡眠里叫醒。所以按状态分档：睡着 3fps、待机 12fps、
     /// 在干活 20fps，只有真的飞起来或者正在做动作才用满帧 24fps。
     var frameInterval: TimeInterval {
+        // 有视频在放的时候，画面本来就是视频层自己刷的，SwiftUI 这边只在
+        // 气泡、特效需要动的时候才重算。实测这一条把待机 CPU 又压掉一半多。
+        if usesVideo {
+            if !effects.isEmpty { return 1.0 / 24.0 }
+            if bubble != nil { return 1.0 / 8.0 }
+            return 1.0
+        }
         if isGliding { return 1.0 / 24.0 }
         if airborne { return 1.0 / 24.0 }
         if action != .none { return 1.0 / 24.0 }
@@ -296,6 +350,10 @@ final class PetModel {
         if dragging {
             isSleeping = false
             action = .none
+            clipOverride = nil
+            clip = .drag
+        } else {
+            refreshClip()
         }
     }
 
@@ -320,6 +378,7 @@ final class PetModel {
         if isSleeping {
             isSleeping = false
             say("唔…醒了醒了", seconds: 2.2)
+            playClip(.wake, seconds: 2.6)
         } else {
             say(Self.pokeLines.randomElement() ?? "嗯？", seconds: 2.2)
         }
@@ -338,6 +397,7 @@ final class PetModel {
         lastInteraction = Date().addingTimeInterval(Self.sleepAfter)
         isSleeping = true
         apply(.sleeping)
+        playClip(.sleepStart, seconds: 3.2)
     }
 
     // MARK: 心情同步
@@ -476,10 +536,82 @@ final class PetModel {
         guard next != .none else { return }
         action = next
         actionStartedAt = Date()
+        refreshClip()
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(next.duration))
             guard let self, self.action == next else { return }
             self.action = .none
+            self.refreshClip()
+        }
+    }
+
+    // MARK: 片段
+
+    /// 临时播一个不属于 `PetAction` 的一次性片段（入睡、醒来）。
+    private func playClip(_ next: PetClip, seconds: TimeInterval) {
+        clipOverride = next
+        clipOverrideUntil = Date().addingTimeInterval(seconds)
+        refreshClip()
+    }
+
+    /// 一次性片段播完了：收掉动作和临时片段，回到心情底片。
+    func clipDidFinish() {
+        if clipOverride == clip {
+            clipOverride = nil
+            clipOverrideUntil = .distantPast
+        }
+        if action != .none, action.duration > 0.4 {
+            action = .none
+        }
+        refreshClip()
+    }
+
+    #if DEBUG
+    /// 调试用：测试之间复位「视频可用」标志。
+    func debugResetVideoAvailability() { videoAvailable = true }
+
+    /// 调试用：无视状态直接播某段。
+    func debugPlayClip(_ next: PetClip, seconds: TimeInterval) {
+        clipOverride = next
+        clipOverrideUntil = Date().addingTimeInterval(seconds)
+        refreshClip()
+    }
+    #endif
+
+    /// 视频起不来，退回立绘。
+    func markVideoUnavailable() {
+        guard videoAvailable else { return }
+        videoAvailable = false
+    }
+
+    /// 按「被拎着 > 临时片段 > 动作 > 心情」重新算该播什么。
+    private func refreshClip() {
+        guard videoAvailable else { return }
+        let next: PetClip
+        if isDragging {
+            next = .drag
+        } else if let override = clipOverride, Date() < clipOverrideUntil {
+            next = override
+        } else if let actionClip = action.clip {
+            next = actionClip
+        } else {
+            next = Self.baseClip(for: mood)
+        }
+        if clip != next { clip = next }
+    }
+
+    /// 每个心情的「底片」——没有动作时就一直循环这个。
+    nonisolated static func baseClip(for mood: PetMood) -> PetClip {
+        switch mood {
+        case .idle: .idle
+        case .thinking: .thinking
+        case .working: .workBusy
+        case .waiting: .workPace
+        // 庆祝是一次性的（由 `react(to:)` 放），底片还是接着干活——
+        // 底片必须是循环片段，否则一次性片段播完就定格在那里。
+        case .success: .workBusy
+        case .error: .workTired
+        case .sleeping: .sleepLoop
         }
     }
 
