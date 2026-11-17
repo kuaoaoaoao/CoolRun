@@ -2,10 +2,10 @@
   "collection": "ms_coolrun_c3194c8f",
   "failed_files": [],
   "indexed_chunks": 2,
-  "indexed_files": 4,
-  "last_completed_at": "2026-11-10T07:39:27.390432Z",
-  "last_started_at": "2026-11-10T07:39:26.426441Z",
-  "last_success_at": "2026-11-10T07:39:27.390432Z",
+  "indexed_files": 8,
+  "last_completed_at": "2026-11-17T06:01:55.965411Z",
+  "last_started_at": "2026-11-17T06:01:54.807802Z",
+  "last_success_at": "2026-11-17T06:01:55.965411Z",
   "milvus_uri": "~/.memsearch/milvus.db",
   "operation": "index",
   "paths": [
@@ -13,6 +13,6 @@
   ],
   "schema_version": 1,
   "status": "ok",
-  "total_files": 4,
-  "updated_at": "2026-11-10T07:39:27.390432Z"
+  "total_files": 8,
+  "updated_at": "2026-11-17T06:01:55.965411Z"
 }
