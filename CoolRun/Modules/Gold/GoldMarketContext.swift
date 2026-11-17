@@ -180,13 +180,13 @@ final class GoldMarketContextService {
     private func fetchGoldNews(now: Date) async throws -> [GoldNewsItem] {
         let searches = [
             NewsSearch(
-                query: "(黄金 OR 金价 OR XAUUSD) when:3d",
+                query: "(黄金 OR 金价 OR XAUUSD) when:3d",  // i18n-allow: 喂给新闻检索的中文查询串
                 language: "zh-CN",
                 region: "CN",
                 edition: "CN:zh-Hans"
             ),
             NewsSearch(
-                query: "(黄金 OR 金价) (美联储 OR 美元 OR 美债收益率 OR 通胀 OR 地缘冲突) when:3d",
+                query: "(黄金 OR 金价) (美联储 OR 美元 OR 美债收益率 OR 通胀 OR 地缘冲突) when:3d",  // i18n-allow: 喂给新闻检索的中文查询串
                 language: "zh-CN",
                 region: "CN",
                 edition: "CN:zh-Hans"

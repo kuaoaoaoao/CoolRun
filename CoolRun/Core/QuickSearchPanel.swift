@@ -293,8 +293,9 @@ struct QuickSearchView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @FocusState private var fieldFocused: Bool
+    @ObservedObject private var appSettings = AppSettings.shared
 
-    private var lang: AppLanguage { AppSettings.shared.language }
+    private var lang: AppLanguage { appSettings.language }
 
     var body: some View {
         VStack(spacing: 0) {

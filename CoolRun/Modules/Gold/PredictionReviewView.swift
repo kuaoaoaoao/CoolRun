@@ -117,8 +117,8 @@ struct PredictionReviewView: View {
                 StatPill(title: LocalizedString.gold("prediction_bias", lang: appSettings.language), value: store.summary.averagePredictionBias?.signedPercentNumber ?? "--", detail: LocalizedString.gold("prediction_minus_actual", lang: appSettings.language))
             }
             
-            if !store.summary.calibrationText.isEmpty {
-                Text(store.summary.calibrationText)
+            if !store.summary.calibrationText(lang: appSettings.language).isEmpty {
+                Text(store.summary.calibrationText(lang: appSettings.language))
                     .font(.system(size: 10))
                     .foregroundStyle(AppTheme.textSecondary(colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
@@ -129,7 +129,7 @@ struct PredictionReviewView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(AppTheme.textSecondary(colorScheme))
                     .fixedSize(horizontal: false, vertical: true)
-            } else if !store.summary.strategyCalibration.isNeutral {
+            } else if !store.summary.strategyCalibration(lang: appSettings.language).isNeutral {
                 calibrationBadge
             }
         }
@@ -143,7 +143,7 @@ struct PredictionReviewView: View {
     }
     
     private var calibrationBadge: some View {
-        let cal = store.summary.strategyCalibration
+        let cal = store.summary.strategyCalibration(lang: appSettings.language)
         return HStack(spacing: 6) {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 10))
@@ -153,7 +153,7 @@ struct PredictionReviewView: View {
                 cal.exposureMultiplier.twoDigitNumber
             ))
                 .font(.system(size: 10, weight: .medium))
-            Text(cal.note)
+            Text(cal.note(lang: appSettings.language))
                 .font(.system(size: 10))
                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
         }
@@ -180,7 +180,7 @@ struct PredictionReviewView: View {
             groupedStatsSection(
                 title: LocalizedString.gold("by_market_state", lang: appSettings.language),
                 summaries: store.summaryByRegime,
-                displayName: { $0 }
+                displayName: { MarketRegime(rawValue: $0)?.displayName(lang: appSettings.language) ?? $0 }
             )
             groupedStatsSection(
                 title: LocalizedString.gold("by_direction", lang: appSettings.language),

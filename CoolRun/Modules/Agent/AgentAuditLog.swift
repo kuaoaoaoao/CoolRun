@@ -77,7 +77,7 @@ final class AgentAuditLog {
             let data = try encoder.encode(entries)
             try data.write(to: fileURL, options: [.atomic])
         } catch {
-            Self.logger.error("审计日志写入失败：\(error.localizedDescription, privacy: .public)")
+            Self.logger.error("审计日志写入失败：\(error.localizedDescription, privacy: .public)")  // i18n-allow: 日志
         }
     }
 

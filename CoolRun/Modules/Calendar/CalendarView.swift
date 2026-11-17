@@ -19,17 +19,10 @@ struct CalendarView: View {
 
     private let calendar = Calendar.current
     private var weekdaySymbols: [String] {
-        let lang = settings.language
-        switch lang {
-        case .english:
-            return ["S", "M", "T", "W", "T", "F", "S"]
-        case .japanese:
-            return ["日", "月", "火", "水", "木", "金", "土"]
-        case .korean:
-            return ["일", "월", "화", "수", "목", "금", "토"]
-        default:
-            return ["日", "一", "二", "三", "四", "五", "六"]
-        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: settings.language.rawValue)
+        let symbols = formatter.veryShortWeekdaySymbols ?? []
+        return symbols.count == 7 ? symbols : ["S", "M", "T", "W", "T", "F", "S"]
     }
     private let holidayService = HolidayService.shared
 
@@ -514,31 +507,31 @@ struct CalendarView: View {
         birthdays: [Birthday],
         countdowns: [CountdownEvent]
     ) -> String {
+        let lang = settings.language
+        let nameSeparator = LocalizedString.l(lang, en: ", ", zh: "、", ja: "、", ko: ", ")
+        let partSeparator = LocalizedString.l(lang, en: ", ", zh: "，", ja: "、", ko: ", ")
         var parts = [date.formatted(date: .complete, time: .omitted)]
         if !birthdays.isEmpty {
-            let names = birthdays.map(\.name).joined(separator: "、")
+            let names = birthdays.map(\.name).joined(separator: nameSeparator)
             parts.append("\(LocalizedString.calendar("birthday")): \(names)")
         }
         if !countdowns.isEmpty {
-            let names = countdowns.map(\.name).joined(separator: "、")
+            let names = countdowns.map(\.name).joined(separator: nameSeparator)
             parts.append("\(LocalizedString.countdown("events")): \(names)")
         }
-        return parts.joined(separator: "，")
+        return parts.joined(separator: partSeparator)
     }
 
     private var monthYearText: String {
         let formatter = DateFormatter()
         let lang = settings.language
-        switch lang {
-        case .english:
-            formatter.dateFormat = "MMM yyyy"
-        case .japanese:
-            formatter.dateFormat = "yyyy年M月"
-        case .korean:
-            formatter.dateFormat = "yyyy년 M월"
-        case .chinese:
-            formatter.dateFormat = "yyyy年M月"
-        }
+        formatter.dateFormat = LocalizedString.l(
+            lang,
+            en: "MMM yyyy",
+            zh: "yyyy年M月",
+            ja: "yyyy年M月",
+            ko: "yyyy년 M월"
+        )
         formatter.locale = Locale(identifier: lang.rawValue)
         return formatter.string(from: currentMonth)
     }
@@ -555,16 +548,13 @@ struct CalendarView: View {
     private var selectedDateFormatted: String {
         let formatter = DateFormatter()
         let lang = settings.language
-        switch lang {
-        case .english:
-            formatter.dateFormat = "EEEE, MMM d, yyyy"
-        case .japanese:
-            formatter.dateFormat = "yyyy年M月d日 EEEE"
-        case .korean:
-            formatter.dateFormat = "yyyy년 M월 d일 EEEE"
-        case .chinese:
-            formatter.dateFormat = "yyyy年M月d日 EEEE"
-        }
+        formatter.dateFormat = LocalizedString.l(
+            lang,
+            en: "EEEE, MMM d, yyyy",
+            zh: "yyyy年M月d日 EEEE",
+            ja: "yyyy年M月d日 EEEE",
+            ko: "yyyy년 M월 d일 EEEE"
+        )
         formatter.locale = Locale(identifier: lang.rawValue)
         return formatter.string(from: selectedDate)
     }
@@ -735,21 +725,10 @@ struct YearMonthPickerView: View {
     private let calendar = Calendar.current
 
     private var months: [String] {
-        let lang = settings.language
-        switch lang {
-        case .english:
-            return ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        case .japanese:
-            return ["1月", "2月", "3月", "4月", "5月", "6月",
-                    "7月", "8月", "9月", "10月", "11月", "12月"]
-        case .korean:
-            return ["1월", "2월", "3월", "4월", "5월", "6월",
-                    "7월", "8월", "9월", "10월", "11월", "12월"]
-        default:
-            return ["1月", "2月", "3月", "4月", "5月", "6月",
-                    "7月", "8月", "9月", "10月", "11月", "12月"]
-        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: settings.language.rawValue)
+        let symbols = formatter.shortMonthSymbols ?? []
+        return symbols.count == 12 ? symbols : (1...12).map(String.init)
     }
 
     // 年份范围：前后50年

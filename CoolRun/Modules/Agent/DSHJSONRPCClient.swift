@@ -6,11 +6,25 @@ import Foundation
 /// 请求带 id、通知不带 id。没有 cancel 方法，取消就是关进程。
 @MainActor
 final class DSHJSONRPCClient {
-    struct ServerError: LocalizedError {
+    nonisolated struct ServerError: LocalizedError, AgentLocalizedError {
         let code: Int
         let message: String
-        var errorDescription: String? { "DSH 错误 \(code): \(message)" }
+
+        nonisolated var errorDescription: String? { localizedMessage(.chinese) }
+
+        nonisolated func localizedMessage(_ lang: AppLanguage) -> String {
+            LocalizedString.l(
+                lang,
+                en: "DSH error \(code): \(message)",
+                zh: "DSH 错误 \(code): \(message)",
+                ja: "DSH エラー \(code): \(message)",
+                ko: "DSH 오류 \(code): \(message)"
+            )
+        }
     }
+
+    /// 界面文案用的语言。
+    private var lang: AppLanguage { AppSettings.shared.language }
 
     private var process: Process?
     private var stdinHandle: FileHandle?
@@ -110,7 +124,16 @@ final class DSHJSONRPCClient {
         stderrHandle = nil
 
         // 等待中的请求不能就这么悬着：统一回错，界面上才能给出提示。
-        let error = ServerError(code: -1, message: "DSH 运行时已关闭")
+        let error = ServerError(
+            code: -1,
+            message: LocalizedString.l(
+                lang,
+                en: "The DSH runtime is shut down",
+                zh: "DSH 运行时已关闭",
+                ja: "DSH ランタイムは停止しました",
+                ko: "DSH 런타임이 종료되었습니다"
+            )
+        )
         for (_, continuation) in pending {
             continuation.resume(throwing: error)
         }
@@ -128,7 +151,16 @@ final class DSHJSONRPCClient {
 
     private func handleTermination(code: Int32) {
         isRunning = false
-        let error = ServerError(code: Int(code), message: "DSH 运行时已退出")
+        let error = ServerError(
+            code: Int(code),
+            message: LocalizedString.l(
+                lang,
+                en: "The DSH runtime exited",
+                zh: "DSH 运行时已退出",
+                ja: "DSH ランタイムが終了しました",
+                ko: "DSH 런타임이 종료되었습니다"
+            )
+        )
         for (_, continuation) in pending {
             continuation.resume(throwing: error)
         }
@@ -139,8 +171,18 @@ final class DSHJSONRPCClient {
     // MARK: 请求
 
     func request(method: String, params: JSONValue?, timeout: Duration = .seconds(120)) async throws -> JSONValue {
+        let lang = self.lang
         guard isRunning, let stdinHandle else {
-            throw ServerError(code: -1, message: "DSH 运行时没有启动")
+            throw ServerError(
+                code: -1,
+                message: LocalizedString.l(
+                    lang,
+                    en: "The DSH runtime isn't running",
+                    zh: "DSH 运行时没有启动",
+                    ja: "DSH ランタイムが起動していません",
+                    ko: "DSH 런타임이 실행 중이 아닙니다"
+                )
+            )
         }
 
         let id = nextID
@@ -153,7 +195,16 @@ final class DSHJSONRPCClient {
         }
 
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
-            throw ServerError(code: -1, message: "无法编码请求")
+            throw ServerError(
+                code: -1,
+                message: LocalizedString.l(
+                    lang,
+                    en: "Couldn't encode the request",
+                    zh: "无法编码请求",
+                    ja: "リクエストをエンコードできません",
+                    ko: "요청을 인코딩할 수 없습니다"
+                )
+            )
         }
 
         return try await withThrowingTaskGroup(of: JSONValue.self) { group in
@@ -172,11 +223,29 @@ final class DSHJSONRPCClient {
             }
             group.addTask { @MainActor in
                 try await Task.sleep(for: timeout)
-                throw ServerError(code: -1, message: "\(method) 超时")
+                throw ServerError(
+                    code: -1,
+                    message: LocalizedString.l(
+                        lang,
+                        en: "\(method) timed out",
+                        zh: "\(method) 超时",
+                        ja: "\(method) がタイムアウトしました",
+                        ko: "\(method) 시간 초과"
+                    )
+                )
             }
 
             guard let first = try await group.next() else {
-                throw ServerError(code: -1, message: "空结果")
+                throw ServerError(
+                    code: -1,
+                    message: LocalizedString.l(
+                        lang,
+                        en: "Empty result",
+                        zh: "空结果",
+                        ja: "結果が空です",
+                        ko: "결과가 비어 있습니다"
+                    )
+                )
             }
             group.cancelAll()
             return first
@@ -203,7 +272,14 @@ final class DSHJSONRPCClient {
             if let error = object["error"] as? [String: Any] {
                 continuation.resume(throwing: ServerError(
                     code: error["code"] as? Int ?? -1,
-                    message: error["message"] as? String ?? "未知错误"
+                    message: error["message"] as? String
+                        ?? LocalizedString.l(
+                            lang,
+                            en: "Unknown error",
+                            zh: "未知错误",
+                            ja: "不明なエラー",
+                            ko: "알 수 없는 오류"
+                        )
                 ))
             } else {
                 let value = (object["result"] as? [String: Any])

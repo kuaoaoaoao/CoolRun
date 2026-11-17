@@ -4,6 +4,13 @@ import AppKit
 struct CodexMonitorView: View {
     @State private var viewModel: CodexMonitorViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var settings = AppSettings.shared
+
+    private var lang: AppLanguage { settings.language }
+
+    private func localized(en: String, zh: String, ja: String, ko: String) -> String {
+        LocalizedString.l(settings.language, en: en, zh: zh, ja: ja, ko: ko)
+    }
 
     @MainActor
     init() {
@@ -28,9 +35,19 @@ struct CodexMonitorView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Codex 监控")
+                    Text(localized(
+                        en: "Codex Monitor",
+                        zh: "Codex 监控",
+                        ja: "Codex モニター",
+                        ko: "Codex 모니터"
+                    ))
                         .font(.headline)
-                    Text("额度节奏、近期任务与用量")
+                    Text(localized(
+                        en: "Quota pace, recent tasks and usage",
+                        zh: "额度节奏、近期任务与用量",
+                        ja: "クォータのペース、最近のタスクと使用量",
+                        ko: "할당량 흐름, 최근 작업 및 사용량"
+                    ))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -38,7 +55,7 @@ struct CodexMonitorView: View {
                 Spacer()
 
                 Button {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.refresh(lang: lang) }
                 } label: {
                     if viewModel.isRefreshing {
                         ProgressView().controlSize(.mini)
@@ -51,21 +68,56 @@ struct CodexMonitorView: View {
                 .buttonBorderShape(.circle)
                 .controlSize(.small)
                 .disabled(viewModel.isRefreshing)
-                .accessibilityLabel("刷新 Codex 状态")
-                .help("刷新 Codex 状态")
+                .accessibilityLabel(localized(
+                    en: "Refresh Codex status",
+                    zh: "刷新 Codex 状态",
+                    ja: "Codex の状態を更新",
+                    ko: "Codex 상태 새로고침"
+                ))
+                .help(localized(
+                    en: "Refresh Codex status",
+                    zh: "刷新 Codex 状态",
+                    ja: "Codex の状態を更新",
+                    ko: "Codex 상태 새로고침"
+                ))
             }
 
             ScrollView(.vertical, showsIndicators: false) {
                 Group {
                     switch viewModel.state {
                     case .loading:
-                        ProgressView("正在连接本机 Codex…")
+                        ProgressView(localized(
+                            en: "Connecting to local Codex…",
+                            zh: "正在连接本机 Codex…",
+                            ja: "ローカルの Codex に接続中…",
+                            ko: "로컬 Codex에 연결하는 중…"
+                        ))
                             .controlSize(.small)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     case let .unavailable(message):
-                        statusCard(icon: "exclamationmark.triangle", color: .orange, title: "暂时无法读取", detail: message)
+                        statusCard(
+                            icon: "exclamationmark.triangle",
+                            color: .orange,
+                            title: localized(
+                                en: "Unable to read right now",
+                                zh: "暂时无法读取",
+                                ja: "現在読み取れません",
+                                ko: "지금은 읽을 수 없습니다"
+                            ),
+                            detail: message
+                        )
                     case let .notLoggedIn(detail):
-                        statusCard(icon: "person.crop.circle.badge.xmark", color: .secondary, title: "Codex 未返回账号", detail: detail)
+                        statusCard(
+                            icon: "person.crop.circle.badge.xmark",
+                            color: .secondary,
+                            title: localized(
+                                en: "Codex returned no account",
+                                zh: "Codex 未返回账号",
+                                ja: "Codex がアカウントを返しませんでした",
+                                ko: "Codex가 계정을 반환하지 않았습니다"
+                            ),
+                            detail: detail
+                        )
                     case let .ready(snapshot):
                         readyView(snapshot)
                     }
@@ -93,13 +145,18 @@ struct CodexMonitorView: View {
             .background(AppTheme.elevatedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 6) {
-                quickAction("打开 Codex", icon: "sparkles", action: openCodexApplication)
-                quickAction("额度详情", icon: "gauge.with.dots.needle.50percent", action: openUsagePage)
-                quickAction("任务文件", icon: "folder", action: openSessionsFolder)
+                quickAction(localized(en: "Open Codex", zh: "打开 Codex", ja: "Codex を開く", ko: "Codex 열기"), icon: "sparkles", action: openCodexApplication)
+                quickAction(localized(en: "Quota details", zh: "额度详情", ja: "クォータの詳細", ko: "할당량 상세"), icon: "gauge.with.dots.needle.50percent", action: openUsagePage)
+                quickAction(localized(en: "Task files", zh: "任务文件", ja: "タスクファイル", ko: "작업 파일"), icon: "folder", action: openSessionsFolder)
             }
 
             if snapshot.limits.isEmpty && snapshot.usage == nil {
-                Text("暂无额度与用量数据")
+                Text(localized(
+                    en: "No quota or usage data yet",
+                    zh: "暂无额度与用量数据",
+                    ja: "クォータと使用量のデータがありません",
+                    ko: "할당량 및 사용량 데이터가 없습니다"
+                ))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
             }
@@ -111,7 +168,12 @@ struct CodexMonitorView: View {
                         Spacer()
                         if limit.id == snapshot.limits.first?.id,
                            let count = snapshot.resetCreditsAvailableCount, count > 0 {
-                            Text("可重置 \(count) 次")
+                            Text(localized(
+                                en: "\(count) resets available",
+                                zh: "可重置 \(count) 次",
+                                ja: "\(count) 回リセット可能",
+                                ko: "\(count)회 재설정 가능"
+                            ))
                                 .font(.system(size: 8, weight: .medium)).foregroundStyle(.green)
                         }
                     }
@@ -131,14 +193,14 @@ struct CodexMonitorView: View {
             if let usage = snapshot.usage {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 4) {
-                        usageMetric("今日", todayTokens(snapshot.dailyUsage))
-                        usageMetric("累计", compactNumber(usage.lifetimeTokens))
-                        usageMetric("峰值", compactNumber(usage.peakDailyTokens))
+                        usageMetric(localized(en: "Today", zh: "今日", ja: "今日", ko: "오늘"), todayTokens(snapshot.dailyUsage))
+                        usageMetric(localized(en: "Total", zh: "累计", ja: "累計", ko: "누적"), compactNumber(usage.lifetimeTokens))
+                        usageMetric(localized(en: "Peak", zh: "峰值", ja: "ピーク", ko: "최고"), compactNumber(usage.peakDailyTokens))
                     }
                     HStack(spacing: 4) {
-                        usageMetric("连续", dayText(usage.currentStreakDays))
-                        usageMetric("最长连续", dayText(usage.longestStreakDays))
-                        usageMetric("最长任务", durationText(usage.longestRunningTurnSec))
+                        usageMetric(localized(en: "Streak", zh: "连续", ja: "連続", ko: "연속"), dayText(usage.currentStreakDays))
+                        usageMetric(localized(en: "Longest streak", zh: "最长连续", ja: "最長連続", ko: "최장 연속"), dayText(usage.longestStreakDays))
+                        usageMetric(localized(en: "Longest task", zh: "最长任务", ja: "最長タスク", ko: "최장 작업"), durationText(usage.longestRunningTurnSec))
                     }
                     if !snapshot.dailyUsage.isEmpty {
                         CodexUsageHeatmap(buckets: snapshot.dailyUsage)
@@ -150,9 +212,9 @@ struct CodexMonitorView: View {
             }
             HStack {
                 if snapshot.isRateLimitsStale || snapshot.isUsageStale {
-                    Label("部分缓存", systemImage: "clock.arrow.circlepath")
+                    Label(localized(en: "Partly cached", zh: "部分缓存", ja: "一部キャッシュ", ko: "일부 캐시됨"), systemImage: "clock.arrow.circlepath")
                 } else {
-                    Text("每 30 秒刷新")
+                    Text(localized(en: "Refreshes every 30s", zh: "每 30 秒刷新", ja: "30 秒ごとに更新", ko: "30초마다 새로고침"))
                 }
                 Spacer()
                 Text(snapshot.updatedAt.formatted(date: .omitted, time: .standard))
@@ -166,7 +228,7 @@ struct CodexMonitorView: View {
         let pace = window.pace()
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("\(window.title) · \(window.durationText)")
+                Text("\(window.title) · \(window.durationText(lang: lang))")
                     .font(.system(size: 9, weight: .medium))
                 Spacer()
                 if let pace {
@@ -191,7 +253,12 @@ struct CodexMonitorView: View {
                 Text(resetCountdown(window.resetsAt))
                 Spacer()
                 if let pace {
-                    Text("节奏线 \(Int(pace.expectedRemainingPercent.rounded()))%")
+                    Text(localized(
+                        en: "Pace \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        zh: "节奏线 \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        ja: "ペースライン \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        ko: "페이스 \(Int(pace.expectedRemainingPercent.rounded()))%"
+                    ))
                 } else {
                     Text(resetText(window.resetsAt))
                 }
@@ -204,12 +271,17 @@ struct CodexMonitorView: View {
     private func sessionsCard(_ sessions: [CodexSessionSummary]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Label("近期任务", systemImage: "terminal")
+                Label(localized(en: "Recent tasks", zh: "近期任务", ja: "最近のタスク", ko: "최근 작업"), systemImage: "terminal")
                     .font(.system(size: 10, weight: .semibold))
                 Spacer()
                 let activeCount = sessions.filter(\.isActive).count
                 if activeCount > 0 {
-                    Text("\(activeCount) 个活跃")
+                    Text(localized(
+                        en: "\(activeCount) active",
+                        zh: "\(activeCount) 个活跃",
+                        ja: "\(activeCount) 件アクティブ",
+                        ko: "\(activeCount)개 활성"
+                    ))
                         .font(.system(size: 8.5, weight: .semibold))
                         .foregroundStyle(AppTheme.healthy)
                 }
@@ -256,7 +328,12 @@ struct CodexMonitorView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("在访达中显示任务记录")
+                .help(localized(
+                    en: "Reveal task log in Finder",
+                    zh: "在访达中显示任务记录",
+                    ja: "Finder でタスク記録を表示",
+                    ko: "Finder에서 작업 기록 보기"
+                ))
             }
         }
         .padding(9)
@@ -302,10 +379,10 @@ struct CodexMonitorView: View {
 
     private func paceText(_ status: CodexQuotaPace.Status) -> String {
         switch status {
-        case .balanced: "节奏正常"
-        case .comfortable: "额度充足"
-        case .fast: "消耗偏快"
-        case .critical: "额度紧张"
+        case .balanced: localized(en: "On pace", zh: "节奏正常", ja: "ペース正常", ko: "정상 흐름")
+        case .comfortable: localized(en: "Plenty left", zh: "额度充足", ja: "余裕あり", ko: "여유 충분")
+        case .fast: localized(en: "Burning fast", zh: "消耗偏快", ja: "消費が速い", ko: "소비 빠름")
+        case .critical: localized(en: "Tight", zh: "额度紧张", ja: "残りわずか", ko: "부족")
         }
     }
 
@@ -324,26 +401,61 @@ struct CodexMonitorView: View {
     }
 
     private func resetCountdown(_ date: Date?) -> String {
-        guard let date else { return "重置时间未知" }
+        guard let date else { return localized(en: "Reset time unknown", zh: "重置时间未知", ja: "リセット時刻不明", ko: "재설정 시각 알 수 없음") }
         let seconds = max(0, Int(date.timeIntervalSinceNow))
-        if seconds < 60 { return "不到 1 分钟后重置" }
-        if seconds < 3600 { return "\(seconds / 60) 分钟后重置" }
+        if seconds < 60 { return localized(en: "Resets in under a minute", zh: "不到 1 分钟后重置", ja: "1 分以内にリセット", ko: "1분 이내 재설정") }
+        if seconds < 3600 {
+            return localized(
+                en: "Resets in \(seconds / 60) min",
+                zh: "\(seconds / 60) 分钟后重置",
+                ja: "\(seconds / 60) 分後にリセット",
+                ko: "\(seconds / 60)분 후 재설정"
+            )
+        }
         if seconds < 86_400 {
             let hours = seconds / 3600
             let minutes = (seconds % 3600) / 60
-            return minutes > 0 ? "\(hours) 小时 \(minutes) 分后重置" : "\(hours) 小时后重置"
+            return minutes > 0
+                ? localized(
+                    en: "Resets in \(hours) h \(minutes) min",
+                    zh: "\(hours) 小时 \(minutes) 分后重置",
+                    ja: "\(hours) 時間 \(minutes) 分後にリセット",
+                    ko: "\(hours)시간 \(minutes)분 후 재설정"
+                )
+                : localized(
+                    en: "Resets in \(hours) h",
+                    zh: "\(hours) 小时后重置",
+                    ja: "\(hours) 時間後にリセット",
+                    ko: "\(hours)시간 후 재설정"
+                )
         }
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3600
-        return hours > 0 ? "\(days) 天 \(hours) 小时后重置" : "\(days) 天后重置"
+        return hours > 0
+            ? localized(
+                en: "Resets in \(days) d \(hours) h",
+                zh: "\(days) 天 \(hours) 小时后重置",
+                ja: "\(days) 日 \(hours) 時間後にリセット",
+                ko: "\(days)일 \(hours)시간 후 재설정"
+            )
+            : localized(
+                en: "Resets in \(days) d",
+                zh: "\(days) 天后重置",
+                ja: "\(days) 日後にリセット",
+                ko: "\(days)일 후 재설정"
+            )
     }
 
     private func relativeTime(_ date: Date) -> String {
         let seconds = max(0, Int(Date().timeIntervalSince(date)))
-        if seconds < 60 { return "刚刚" }
-        if seconds < 3600 { return "\(seconds / 60) 分前" }
-        if seconds < 86_400 { return "\(seconds / 3600) 时前" }
-        return "\(seconds / 86_400) 天前"
+        if seconds < 60 { return localized(en: "Just now", zh: "刚刚", ja: "たった今", ko: "방금") }
+        if seconds < 3600 {
+            return localized(en: "\(seconds / 60) min ago", zh: "\(seconds / 60) 分前", ja: "\(seconds / 60) 分前", ko: "\(seconds / 60)분 전")
+        }
+        if seconds < 86_400 {
+            return localized(en: "\(seconds / 3600) h ago", zh: "\(seconds / 3600) 时前", ja: "\(seconds / 3600) 時間前", ko: "\(seconds / 3600)시간 전")
+        }
+        return localized(en: "\(seconds / 86_400) d ago", zh: "\(seconds / 86_400) 天前", ja: "\(seconds / 86_400) 日前", ko: "\(seconds / 86_400)일 전")
     }
 
     private func openCodexApplication() {
@@ -368,14 +480,27 @@ struct CodexMonitorView: View {
         NSWorkspace.shared.open(target)
     }
 
-    private func dayText(_ days: Int?) -> String { days.map { "\(max(0, $0))天" } ?? "--" }
+    private func dayText(_ days: Int?) -> String {
+        guard let days else { return "--" }
+        let value = max(0, days)
+        return localized(en: "\(value) d", zh: "\(value)天", ja: "\(value) 日", ko: "\(value)일")
+    }
 
     private func durationText(_ seconds: Int?) -> String {
         guard let seconds else { return "--" }
         let value = max(0, seconds)
-        if value >= 3600 { return "\(value / 3600)时\((value % 3600) / 60)分" }
-        if value >= 60 { return "\(value / 60)分" }
-        return "\(value)秒"
+        if value >= 3600 {
+            return localized(
+                en: "\(value / 3600)h \((value % 3600) / 60)m",
+                zh: "\(value / 3600)时\((value % 3600) / 60)分",
+                ja: "\(value / 3600)時間\((value % 3600) / 60)分",
+                ko: "\(value / 3600)시간 \((value % 3600) / 60)분"
+            )
+        }
+        if value >= 60 {
+            return localized(en: "\(value / 60) min", zh: "\(value / 60)分", ja: "\(value / 60) 分", ko: "\(value / 60)분")
+        }
+        return localized(en: "\(value) s", zh: "\(value)秒", ja: "\(value) 秒", ko: "\(value)초")
     }
 
     private func todayTokens(_ buckets: [CodexDailyUsage]) -> String {
@@ -398,6 +523,8 @@ private struct CodexQuotaProgressBar: View {
     let expectedRemainingPercent: Double?
     let tint: Color
 
+    @ObservedObject private var settings = AppSettings.shared
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -419,7 +546,13 @@ private struct CodexQuotaProgressBar: View {
             }
         }
         .frame(height: 5)
-        .accessibilityLabel("剩余额度")
+        .accessibilityLabel(LocalizedString.l(
+            settings.language,
+            en: "Remaining quota",
+            zh: "剩余额度",
+            ja: "残りクォータ",
+            ko: "남은 할당량"
+        ))
         .accessibilityValue("\(Int(remainingPercent.rounded()))%")
     }
 }
@@ -427,9 +560,17 @@ private struct CodexQuotaProgressBar: View {
 private struct CodexUsageHeatmap: View {
     let buckets: [CodexDailyUsage]
 
+    @ObservedObject private var settings = AppSettings.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("近 30 天 Token 用量")
+            Text(LocalizedString.l(
+                settings.language,
+                en: "Token usage, last 30 days",
+                zh: "近 30 天 Token 用量",
+                ja: "直近 30 日の Token 使用量",
+                ko: "최근 30일 Token 사용량"
+            ))
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
             HStack(spacing: 3) {

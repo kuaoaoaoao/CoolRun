@@ -40,19 +40,55 @@ final class ClipboardAI {
             }
         }
 
-        nonisolated var instruction: String {
+        nonisolated func instruction(_ language: AppLanguage) -> String {
             switch self {
             case .summarize:
-                return "把这段内容压缩成不超过 5 条要点，每条一行，用「- 」开头。保留关键数字、时间、人名、金额。不要编造，不要加建议，不要写开场白。"
+                return LocalizedString.l(
+                    language,
+                    en: "Condense this into at most 5 bullet points, one per line, each starting with \"- \". Keep the key numbers, dates, names and amounts. Do not make things up, do not add advice, do not write an intro.",
+                    zh: "把这段内容压缩成不超过 5 条要点，每条一行，用「- 」开头。保留关键数字、时间、人名、金额。不要编造，不要加建议，不要写开场白。",
+                    ja: "この内容を最大5つの要点に圧縮し、1行に1つ「- 」で始めてください。重要な数字・日時・人名・金額は残すこと。創作や助言、前置きは不要です。",
+                    ko: "이 내용을 5개 이하의 요점으로 압축하고 한 줄에 하나씩 \"- \"로 시작하세요. 핵심 숫자, 날짜, 이름, 금액은 유지하세요. 지어내지 말고 조언이나 서두도 쓰지 마세요."
+                )
             case .clean:
-                return """
-                把这段文本清理成可以直接使用的干净文本：去掉多余空行、行号、页眉页脚、转载声明、广告、\
-                被硬换行切断的句子要接回去；不改变原意、不改变顺序、不缩写内容。只输出清理后的正文。
-                """
+                return LocalizedString.l(
+                    language,
+                    en: """
+                    Clean this text up so it can be used directly: remove extra blank lines, line numbers, headers/footers, \
+                    repost notices and ads; rejoin sentences broken by hard line wraps. Do not change the meaning, \
+                    the order or shorten the content. Output only the cleaned body.
+                    """,
+                    zh: """
+                    把这段文本清理成可以直接使用的干净文本：去掉多余空行、行号、页眉页脚、转载声明、广告、\
+                    被硬换行切断的句子要接回去；不改变原意、不改变顺序、不缩写内容。只输出清理后的正文。
+                    """,
+                    ja: """
+                    このテキストをそのまま使える形に整えてください：余分な空行、行番号、ヘッダー・フッター、\
+                    転載表示、広告を削除し、改行で途切れた文はつなげること。意味・順序は変えず、内容も省略しないこと。\
+                    整えた本文だけを出力してください。
+                    """,
+                    ko: """
+                    이 텍스트를 바로 쓸 수 있게 정리하세요: 불필요한 빈 줄, 줄 번호, 머리말/꼬리말, \
+                    재배포 문구, 광고를 제거하고, 강제 줄바꿈으로 끊긴 문장은 이어 붙이세요. 의미와 순서를 바꾸지 말고 \
+                    내용을 줄이지 마세요. 정리된 본문만 출력하세요.
+                    """
+                )
             case .todos:
-                return "从这段内容里提取需要人去做的事，一条一行，用「- 」开头。每条要带上原文里的时间、对象、数量等约束。没有可执行事项就只输出「没有找到待办」。不要补充原文没有的任务。"
+                return LocalizedString.l(
+                    language,
+                    en: "Extract the things a person needs to do from this content, one per line, each starting with \"- \". Each item must keep the time, target and quantity constraints from the original. If there is nothing actionable, output only \"No to-dos found\". Do not add tasks that are not in the original.",
+                    zh: "从这段内容里提取需要人去做的事，一条一行，用「- 」开头。每条要带上原文里的时间、对象、数量等约束。没有可执行事项就只输出「没有找到待办」。不要补充原文没有的任务。",
+                    ja: "この内容から人がやるべきことを抽出し、1行に1つ「- 」で始めてください。各項目には原文の日時・対象・数量などの条件を含めること。実行できることがなければ「ToDo は見つかりません」とだけ出力してください。原文にないタスクを補わないこと。",
+                    ko: "이 내용에서 사람이 해야 할 일을 추출해 한 줄에 하나씩 \"- \"로 시작하세요. 각 항목에는 원문의 시간, 대상, 수량 등의 조건을 담으세요. 실행할 일이 없으면 \"할 일을 찾지 못했습니다\"만 출력하세요. 원문에 없는 작업을 추가하지 마세요."
+                )
             case .translate:
-                return "如果这段内容是中文就翻译成英文，否则翻译成简体中文。只输出译文，不要解释、不要保留原文。"
+                return LocalizedString.l(
+                    language,
+                    en: "If this content is in Chinese, translate it into English; otherwise translate it into Simplified Chinese. Output only the translation, with no explanation and no original text.",
+                    zh: "如果这段内容是中文就翻译成英文，否则翻译成简体中文。只输出译文，不要解释、不要保留原文。",
+                    ja: "この内容が中国語なら英語に、それ以外なら簡体字中国語に翻訳してください。訳文だけを出力し、説明も原文も含めないこと。",
+                    ko: "이 내용이 중국어면 영어로, 그렇지 않으면 간체 중국어로 번역하세요. 번역문만 출력하고 설명이나 원문은 넣지 마세요."
+                )
             }
         }
     }
@@ -79,9 +115,16 @@ final class ClipboardAI {
 
     func transform(_ rawText: String, action: Action) async {
         guard !isWorking else { return }
+        let language = AppSettings.shared.language
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            errorMessage = "这条内容是空的，没什么可整理的。"
+            errorMessage = LocalizedString.l(
+                language,
+                en: "This entry is empty, nothing to tidy up.",
+                zh: "这条内容是空的，没什么可整理的。",
+                ja: "この項目は空なので、整理するものがありません。",
+                ko: "이 항목은 비어 있어서 정리할 것이 없습니다."
+            )
             return
         }
 
@@ -89,7 +132,13 @@ final class ClipboardAI {
         do {
             config = try AgentSettings.shared.makeConfig()
         } catch {
-            errorMessage = "先在 Agent 设置里配好模型，再来整理。"
+            errorMessage = LocalizedString.l(
+                language,
+                en: "Configure a model in Agent settings first, then come back.",
+                zh: "先在 Agent 设置里配好模型，再来整理。",
+                ja: "先に Agent 設定でモデルを設定してからもう一度お試しください。",
+                ko: "먼저 Agent 설정에서 모델을 구성한 뒤 다시 시도하세요."
+            )
             return
         }
 
@@ -103,7 +152,6 @@ final class ClipboardAI {
         let truncated = String(trimmed.prefix(Self.inputLimit))
         wasTruncated = truncated.count < trimmed.count
 
-        let language = AppSettings.shared.language
         let system = LocalizedString.l(
             language,
             en: "You are a careful text editor. Do exactly the requested operation and output only the result.",
@@ -113,12 +161,20 @@ final class ClipboardAI {
         )
 
         let stream: AsyncThrowingStream<WireEvent, Error>
+        let instruction = action.instruction(language)
+        let userPrompt = LocalizedString.l(
+            language,
+            en: "Task: \(instruction)\n\nContent:\n\(truncated)",
+            zh: "任务：\(instruction)\n\n内容：\n\(truncated)",
+            ja: "タスク：\(instruction)\n\n内容：\n\(truncated)",
+            ko: "작업: \(instruction)\n\n내용:\n\(truncated)"
+        )
         do {
             let wire = AgentWireFactory.make(config.protocolKind)
             stream = try await wire.stream(
                 messages: [
                     AgentMessage(role: .system, content: system),
-                    AgentMessage(role: .user, content: "任务：\(action.instruction)\n\n内容：\n\(truncated)"),
+                    AgentMessage(role: .user, content: userPrompt),
                 ],
                 tools: [],
                 config: config
@@ -140,7 +196,13 @@ final class ClipboardAI {
 
         let result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else {
-            errorMessage = "模型没返回内容，换个说法再试一次。"
+            errorMessage = LocalizedString.l(
+                language,
+                en: "The model returned nothing. Try rephrasing and run it again.",
+                zh: "模型没返回内容，换个说法再试一次。",
+                ja: "モデルから内容が返りませんでした。言い方を変えてもう一度お試しください。",
+                ko: "모델이 내용을 반환하지 않았습니다. 표현을 바꿔 다시 시도하세요."
+            )
             return
         }
         output = result
@@ -162,6 +224,7 @@ final class ClipboardAI {
     /// 关键词搜不到时，把候选片段交给模型挑编号。
     /// 返回命中的条目 id（按原顺序），失败返回空数组。
     func findByMeaning(_ query: String, in entries: [ClipboardHistoryEntry]) async -> [UUID] {
+        let language = AppSettings.shared.language
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty, !entries.isEmpty else { return [] }
 
@@ -169,7 +232,13 @@ final class ClipboardAI {
         do {
             config = try AgentSettings.shared.makeConfig()
         } catch {
-            searchError = "先在 Agent 设置里配好模型。"
+            searchError = LocalizedString.l(
+                language,
+                en: "Configure a model in Agent settings first.",
+                zh: "先在 Agent 设置里配好模型。",
+                ja: "先に Agent 設定でモデルを設定してください。",
+                ko: "먼저 Agent 설정에서 모델을 구성하세요."
+            )
             return []
         }
 
@@ -178,12 +247,36 @@ final class ClipboardAI {
             "\(index + 1). \(Self.snippet(entry.text))"
         }.joined(separator: "\n")
 
-        let system = """
-        你要在剪贴板历史里找东西。用户会给出想找什么，以及带编号的候选片段。
-        只输出一个 JSON 数组，里面是真正相关的编号，例如 [3,7]；都不相关就输出 []。
-        不要输出任何解释文字或代码块标记。宁缺勿滥：只是"提到"同一个词但用途不同的，不要选。
-        """
-        let user = "要找的是：\(trimmedQuery)\n\n候选片段：\n\(numbered)"
+        let system = LocalizedString.l(
+            language,
+            en: """
+            You are searching clipboard history. The user says what they are looking for and gives numbered candidate snippets.
+            Output only a JSON array of the numbers that are truly relevant, for example [3,7]; output [] if none are relevant.
+            Do not output any explanation or code fences. Prefer fewer hits: skip ones that merely mention the same word for a different purpose.
+            """,
+            zh: """
+            你要在剪贴板历史里找东西。用户会给出想找什么，以及带编号的候选片段。
+            只输出一个 JSON 数组，里面是真正相关的编号，例如 [3,7]；都不相关就输出 []。
+            不要输出任何解释文字或代码块标记。宁缺勿滥：只是"提到"同一个词但用途不同的，不要选。
+            """,
+            ja: """
+            クリップボード履歴から探します。ユーザーは探したいものと、番号付きの候補断片を提示します。
+            本当に関連する番号だけを JSON 配列で出力してください（例: [3,7]）。該当なしなら [] を出力します。
+            説明文やコードブロック記号は出力しないこと。同じ語が出てくるだけの無関係なものは選ばないこと。
+            """,
+            ko: """
+            클립보드 기록에서 찾습니다. 사용자가 찾는 내용과 번호가 붙은 후보 조각을 제공합니다.
+            실제로 관련 있는 번호만 JSON 배열로 출력하세요(예: [3,7]). 해당 없으면 []를 출력하세요.
+            설명문이나 코드 블록 표시는 출력하지 마세요. 같은 단어가 나올 뿐 용도가 다른 항목은 고르지 마세요.
+            """
+        )
+        let user = LocalizedString.l(
+            language,
+            en: "Looking for: \(trimmedQuery)\n\nCandidates:\n\(numbered)",
+            zh: "要找的是：\(trimmedQuery)\n\n候选片段：\n\(numbered)",
+            ja: "探しているもの：\(trimmedQuery)\n\n候補：\n\(numbered)",
+            ko: "찾는 내용: \(trimmedQuery)\n\n후보:\n\(numbered)"
+        )
 
         isSearching = true
         searchError = nil
@@ -218,7 +311,13 @@ final class ClipboardAI {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return false }
         let store = NotesStore.shared
-        let groupName = "剪贴板整理"
+        let groupName = LocalizedString.l(
+            AppSettings.shared.language,
+            en: "Clipboard tidied",
+            zh: "剪贴板整理",
+            ja: "クリップボード整理",
+            ko: "클립보드 정리"
+        )
         let groupID = store.groups.first(where: { $0.name == groupName })?.id
             ?? store.addGroup(name: groupName)?.id
         return store.saveNote(title: title, body: body, groupID: groupID) != nil

@@ -103,17 +103,18 @@ final class GoldAnalysisViewModel {
 
     func refresh(records: [GoldPriceRecord], candlePeriod: CandlePeriod) {
         let contextSnapshot = marketContext
+        let lang = AppSettings.shared.language
         // 关闭自动校准时只观察历史表现，策略按中性参数运行
         let autoCalibrationEnabled = AppSettings.shared.goldAutoCalibrationEnabled
         let calibration = autoCalibrationEnabled
-            ? learningStore.summary.strategyCalibration
+            ? learningStore.summary.strategyCalibration(lang: lang)
             : .neutral
         let signature = makeSignature(
             records: records,
             candlePeriod: candlePeriod,
             marketContext: contextSnapshot,
             calibration: calibration
-        ) + "-cal:\(autoCalibrationEnabled)"
+        ) + "-cal:\(autoCalibrationEnabled)-lang:\(lang.rawValue)"
         guard signature != lastRecordsSignature else { return }
 
         lastRecordsSignature = signature
@@ -130,7 +131,8 @@ final class GoldAnalysisViewModel {
                     records: recordsSnapshot,
                     candlePeriod: candlePeriod,
                     marketContext: contextSnapshot,
-                    calibration: calibration
+                    calibration: calibration,
+                    lang: lang
                 )
             }.value
 
@@ -336,7 +338,8 @@ final class GoldAnalysisViewModel {
         records: [GoldPriceRecord],
         candlePeriod: CandlePeriod,
         marketContext: GoldMarketContext?,
-        calibration: GoldStrategyCalibration
+        calibration: GoldStrategyCalibration,
+        lang: AppLanguage
     ) -> GoldAnalysisResult {
         let displayRecords = makeDisplayRecords(records: records)
         let statistics = GoldAnalysisEngine.makeStatistics(records: displayRecords)
@@ -347,7 +350,8 @@ final class GoldAnalysisViewModel {
             signal = TradingSignalEngine.generateSignal(
                 prices: displayRecords.map(\.price),
                 currentPrice: currentPrice,
-                snapshot: snapshot
+                snapshot: snapshot,
+                lang: lang
             )
         } else {
             signal = nil
@@ -360,7 +364,8 @@ final class GoldAnalysisViewModel {
                 snapshot: snapshot,
                 signal: signal,
                 marketContext: marketContext,
-                calibration: calibration
+                calibration: calibration,
+                lang: lang
             )
         } else {
             advancedReport = nil

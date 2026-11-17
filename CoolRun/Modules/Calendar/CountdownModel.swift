@@ -105,20 +105,31 @@ struct CountdownEvent: Identifiable, Codable, Equatable {
     }
 
     // 日期显示文本，如 "3月8日" / "闰二月初八" / "2027年6月7日"
-    var dateString: String {
+    func dateString(lang: AppLanguage) -> String {
         if isLunar {
-            let monthNames = ["正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊"]
+            let monthNames = ["正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊"]  // i18n-allow: 农历月名与日名（文化数据）
             let dayNames = [
-                "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
-                "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+                "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",  // i18n-allow: 农历月名与日名（文化数据）
+                "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",  // i18n-allow: 农历月名与日名（文化数据）
+                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"  // i18n-allow: 农历月名与日名（文化数据）
             ]
             guard (1...12).contains(month), (1...30).contains(day) else { return "--" }
-            let prefix = repeatsAnnually ? "" : targetYear.map { "\($0)年" } ?? ""
-            return prefix + (isLeapMonth ? "闰" : "") + monthNames[month - 1] + "月" + dayNames[day - 1]
+            let prefix = repeatsAnnually ? "" : targetYear.map { "\($0)年" } ?? ""  // i18n-allow: 农历月名与日名（文化数据）
+            return prefix + (isLeapMonth ? "闰" : "") + monthNames[month - 1] + "月" + dayNames[day - 1]  // i18n-allow: 农历月名与日名（文化数据）
         }
-        let prefix = repeatsAnnually ? "" : targetYear.map { "\($0)年" } ?? ""
-        return "\(prefix)\(month)月\(day)日"
+        let yearPrefix = repeatsAnnually
+            ? ""
+            : (targetYear.map {
+                LocalizedString.l(lang, en: "\($0)/", zh: "\($0)年", ja: "\($0)年", ko: "\($0)년 ")
+            } ?? "")
+        let monthDay = LocalizedString.l(
+            lang,
+            en: "\(month)/\(day)",
+            zh: "\(month)月\(day)日",
+            ja: "\(month)月\(day)日",
+            ko: "\(month)월 \(day)일"
+        )
+        return yearPrefix + monthDay
     }
 }
 

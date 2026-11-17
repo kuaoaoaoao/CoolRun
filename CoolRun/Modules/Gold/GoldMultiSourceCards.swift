@@ -126,16 +126,16 @@ struct MultiSourcePriceCard: View {
     // 接口返回中文平台名（如"新浪-股票|基金API"），映射为四语名称
     private func localizedName(_ name: String) -> String {
         let lang = settings.language
-        if name.contains("新浪") {
+        if name.contains("新浪") {  // i18n-allow: 数据源中文名匹配（后端返回的原始名称）
             return LocalizedString.l(lang, en: "Sina Finance", zh: "新浪财经", ja: "新浪財経", ko: "시나 파이낸스")
         }
-        if name.contains("民生") {
+        if name.contains("民生") {  // i18n-allow: 数据源中文名匹配（后端返回的原始名称）
             return LocalizedString.l(lang, en: "Minsheng Bank", zh: "民生银行", ja: "民生銀行", ko: "민생은행")
         }
-        if name.contains("浙商") {
+        if name.contains("浙商") {  // i18n-allow: 数据源中文名匹配（后端返回的原始名称）
             return LocalizedString.l(lang, en: "CZBank", zh: "浙商银行", ja: "浙商銀行", ko: "저상은행")
         }
-        if name.contains("工商") {
+        if name.contains("工商") {  // i18n-allow: 数据源中文名匹配（后端返回的原始名称）
             return LocalizedString.l(lang, en: "ICBC", zh: "工商银行", ja: "工商銀行", ko: "공상은행")
         }
         return name.split(separator: "-").first.map(String.init) ?? name

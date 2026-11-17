@@ -213,6 +213,10 @@ final class PetModel {
     /// 用户要不要用视频动作。关掉就走立绘合成，省一点电。
     var videoEnabled = true
 
+    /// 气泡文案的语言。由 `WhalePetView` 在出现和切换语言时写入——
+    /// 模型不直接读 `AppSettings.shared`，避免把全局状态带进表现层模型。
+    var language: AppLanguage = .chinese
+
     /// 窗口藏起来时把视频也停掉——不然藏在屏幕外还在解码，白烧电。
     var videoPaused = false
 
@@ -377,10 +381,26 @@ final class PetModel {
         lastInteraction = Date()
         if isSleeping {
             isSleeping = false
-            say("唔…醒了醒了", seconds: 2.2)
+            say(
+                LocalizedString.l(
+                    language,
+                    en: "Mmm… I'm awake",
+                    zh: "唔…醒了醒了",
+                    ja: "ん…起きた起きた",
+                    ko: "음… 일어났어"
+                ),
+                seconds: 2.2
+            )
             playClip(.wake, seconds: 2.6)
         } else {
-            say(Self.pokeLines.randomElement() ?? "嗯？", seconds: 2.2)
+            let fallback = LocalizedString.l(
+                language,
+                en: "Huh?",
+                zh: "嗯？",
+                ja: "え？",
+                ko: "응?"
+            )
+            say(Self.pokeLines(lang: language).randomElement() ?? fallback, seconds: 2.2)
         }
         spawn(.heart, count: 2, at: CGPoint(x: 0.5, y: 0.26))
         play(.hop(7))
@@ -418,7 +438,7 @@ final class PetModel {
             if coordinator.pendingApproval != nil {
                 apply(.waiting)
             } else if let last = coordinator.activities.last, !last.isFinished {
-                apply(.working(Self.friendlyTool(last.name)))
+                apply(.working(Self.friendlyTool(last.name, lang: language)))
             } else {
                 apply(.thinking)
             }
@@ -449,7 +469,7 @@ final class PetModel {
     private func apply(_ next: PetMood) {
         guard next != mood else { return }
         mood = next
-        say(Self.bubbleText(for: next), seconds: nil)
+        say(Self.bubbleText(for: next, lang: language), seconds: nil)
         react(to: next)
     }
 
@@ -637,53 +657,106 @@ final class PetModel {
 
     // MARK: 文案
 
-    nonisolated static func bubbleText(for mood: PetMood) -> String? {
+    nonisolated static func bubbleText(for mood: PetMood, lang: AppLanguage) -> String? {
         switch mood {
         case .idle: nil
         case .sleeping: "z Z"
-        case .thinking: "本鱼在想…"
-        case .working(let tool): "在用「\(tool)」"
-        case .waiting: "等你点一下下～"
-        case .success: "想好啦！"
-        case .error: "哎呀，卡住了"
+        case .thinking:
+            LocalizedString.l(lang, en: "Thinking…", zh: "本鱼在想…", ja: "考え中…", ko: "생각 중…")
+        case .working(let tool):
+            LocalizedString.l(
+                lang,
+                en: "Using \(tool)",
+                zh: "在用「\(tool)」",
+                ja: "「\(tool)」を使ってる",
+                ko: "\(tool) 사용 중"
+            )
+        case .waiting:
+            LocalizedString.l(
+                lang,
+                en: "Waiting for your tap~",
+                zh: "等你点一下下～",
+                ja: "タップ待ってるよ～",
+                ko: "한 번만 눌러 줘~"
+            )
+        case .success:
+            LocalizedString.l(lang, en: "All done!", zh: "想好啦！", ja: "できたよ！", ko: "다 됐어!")
+        case .error:
+            LocalizedString.l(lang, en: "Oops, got stuck", zh: "哎呀，卡住了", ja: "あら、詰まっちゃった", ko: "어라, 막혔어")
         }
     }
 
     /// 工具名太长，气泡里放不下，翻成人话。
-    nonisolated static func friendlyTool(_ name: String) -> String {
+    nonisolated static func friendlyTool(_ name: String, lang: AppLanguage) -> String {
         switch name {
-        case "system_snapshot": "看系统"
-        case "system_processes": "翻进程"
-        case "system_battery": "看电池"
-        case "system_network": "看网速"
-        case "gold_price": "查金价"
-        case "gold_history": "翻金价历史"
-        case "gold_signals", "gold_technical": "算指标"
-        case "gold_forecast", "gold_strategy": "想策略"
-        case "calendar_upcoming": "翻日程"
-        case "english_daily": "备今日英语"
-        case "quota_status": "查额度"
-        case "notes_search": "翻笔记"
-        case "notes_create": "记笔记"
-        case "notes_toggle_pin": "钉笔记"
-        case "clipboard_search": "翻剪贴板"
-        case "clipboard_copy": "复制"
-        case "ui_switch_panel": "换面板"
-        case "notify": "提醒你"
-        case "reminder_create": "设提醒"
-        case "screenshot": "截图"
+        case "system_snapshot":
+            LocalizedString.l(lang, en: "Checking system", zh: "看系统", ja: "システム確認", ko: "시스템 확인")
+        case "system_processes":
+            LocalizedString.l(lang, en: "Reading processes", zh: "翻进程", ja: "プロセス確認", ko: "프로세스 확인")
+        case "system_battery":
+            LocalizedString.l(lang, en: "Checking battery", zh: "看电池", ja: "バッテリー確認", ko: "배터리 확인")
+        case "system_network":
+            LocalizedString.l(lang, en: "Checking network", zh: "看网速", ja: "ネット速度確認", ko: "네트워크 확인")
+        case "gold_price":
+            LocalizedString.l(lang, en: "Gold price", zh: "查金价", ja: "金価格を確認", ko: "금 시세 확인")
+        case "gold_history":
+            LocalizedString.l(lang, en: "Gold history", zh: "翻金价历史", ja: "金価格履歴", ko: "금 시세 기록")
+        case "gold_signals", "gold_technical":
+            LocalizedString.l(lang, en: "Crunching indicators", zh: "算指标", ja: "指標を計算", ko: "지표 계산")
+        case "gold_forecast", "gold_strategy":
+            LocalizedString.l(lang, en: "Planning strategy", zh: "想策略", ja: "戦略を検討", ko: "전략 구상")
+        case "calendar_upcoming":
+            LocalizedString.l(lang, en: "Checking calendar", zh: "翻日程", ja: "予定を確認", ko: "일정 확인")
+        case "english_daily":
+            LocalizedString.l(lang, en: "Today's English", zh: "备今日英语", ja: "今日の英語を準備", ko: "오늘의 영어 준비")
+        case "quota_status":
+            LocalizedString.l(lang, en: "Checking quota", zh: "查额度", ja: "クォータ確認", ko: "할당량 확인")
+        case "notes_search":
+            LocalizedString.l(lang, en: "Searching notes", zh: "翻笔记", ja: "メモを検索", ko: "메모 검색")
+        case "notes_create":
+            LocalizedString.l(lang, en: "Writing a note", zh: "记笔记", ja: "メモを作成", ko: "메모 작성")
+        case "notes_toggle_pin":
+            LocalizedString.l(lang, en: "Pinning a note", zh: "钉笔记", ja: "メモを固定", ko: "메모 고정")
+        case "clipboard_search":
+            LocalizedString.l(lang, en: "Searching clipboard", zh: "翻剪贴板", ja: "クリップボード検索", ko: "클립보드 검색")
+        case "clipboard_copy":
+            LocalizedString.l(lang, en: "Copying", zh: "复制", ja: "コピー", ko: "복사")
+        case "ui_switch_panel":
+            LocalizedString.l(lang, en: "Switching panel", zh: "换面板", ja: "パネル切替", ko: "패널 전환")
+        case "notify":
+            LocalizedString.l(lang, en: "Notifying you", zh: "提醒你", ja: "通知する", ko: "알려 주기")
+        case "reminder_create":
+            LocalizedString.l(lang, en: "Setting a reminder", zh: "设提醒", ja: "リマインダー作成", ko: "알림 설정")
+        case "screenshot":
+            LocalizedString.l(lang, en: "Screenshot", zh: "截图", ja: "スクリーンショット", ko: "스크린샷")
         default:
-            name.hasPrefix("plugin_") ? "用插件" : name
+            name.hasPrefix("plugin_")
+                ? LocalizedString.l(lang, en: "Running a plugin", zh: "用插件", ja: "プラグイン使用", ko: "플러그인 사용")
+                : name
         }
     }
 
-    nonisolated static let pokeLines = [
-        "诶？",
-        "摸鱼中…",
-        "干嘛呀～",
-        "本鱼在呢",
-        "有事说事，没事摸鱼",
-        "别戳啦，痒",
-        "再戳就要收费了",
-    ]
+    nonisolated static func pokeLines(lang: AppLanguage) -> [String] {
+        [
+            LocalizedString.l(lang, en: "Huh?", zh: "诶？", ja: "え？", ko: "응?"),
+            LocalizedString.l(lang, en: "Slacking off…", zh: "摸鱼中…", ja: "サボり中…", ko: "딩굴 중…"),
+            LocalizedString.l(lang, en: "What now~", zh: "干嘛呀～", ja: "なあに～", ko: "뭐야~"),
+            LocalizedString.l(lang, en: "I'm here", zh: "本鱼在呢", ja: "ここにいるよ", ko: "여기 있어"),
+            LocalizedString.l(
+                lang,
+                en: "Got business? Otherwise I'm slacking",
+                zh: "有事说事，没事摸鱼",
+                ja: "用があるなら言って、なければサボる",
+                ko: "볼일 있으면 말해, 없으면 딩굴"
+            ),
+            LocalizedString.l(lang, en: "Stop poking, it tickles", zh: "别戳啦，痒", ja: "つつかないで、くすぐったい", ko: "찌르지 마, 간지러워"),
+            LocalizedString.l(
+                lang,
+                en: "Poke again and it's a paid service",
+                zh: "再戳就要收费了",
+                ja: "もうつついたら有料だよ",
+                ko: "더 찌르면 유료야"
+            ),
+        ]
+    }
 }

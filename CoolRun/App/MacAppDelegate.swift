@@ -1106,6 +1106,9 @@ enum CoinIconRenderer {
         var drawsSquareHole = false
     }
 
+    /// 「福」字金币的图案字符：属于图标美术，不随界面语言变化。
+    nonisolated static let luckyGlyph = "福"  // i18n-allow: 菜单栏金币图标的装饰字符
+
     static func image(
         phase: Double,
         motion: MenuBarCoinMotion,
@@ -1168,7 +1171,7 @@ enum CoinIconRenderer {
                     color: palette.symbolColor,
                     center: NSPoint(x: coinRect.midX, y: coinRect.midY),
                     rotation: state.symbolRotation,
-                    compact: symbolText == "福"
+                    compact: symbolText == Self.luckyGlyph
                 )
             }
         } else {
@@ -1263,7 +1266,7 @@ enum CoinIconRenderer {
                 face: NSColor(calibratedRed: 1.0, green: 0.70, blue: 0.12, alpha: 1),
                 rim: NSColor(calibratedRed: 0.78, green: 0.22, blue: 0.08, alpha: 1),
                 detail: NSColor(calibratedRed: 0.86, green: 0.34, blue: 0.04, alpha: 1),
-                symbol: "福",
+                symbol: luckyGlyph,
                 symbolColor: NSColor(calibratedRed: 0.72, green: 0.08, blue: 0.04, alpha: 1)
             )
         case .rising:

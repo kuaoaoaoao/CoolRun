@@ -34,6 +34,8 @@ enum LocalizedString {
         case "done": return l(currentLang, en: "Done", zh: "完成", ja: "完了", ko: "완료")
         case "optional": return l(currentLang, en: "Optional", zh: "可选", ja: "任意", ko: "선택 사항")
         case "delete": return l(currentLang, en: "Delete", zh: "删除", ja: "削除", ko: "삭제")
+        case "copy": return l(currentLang, en: "Copy", zh: "复制", ja: "コピー", ko: "복사")
+        case "paste": return l(currentLang, en: "Paste", zh: "粘贴", ja: "ペースト", ko: "붙여넣기")
         case "ok": return l(currentLang, en: "OK", zh: "好", ja: "OK", ko: "확인")
         case "import": return l(currentLang, en: "Import", zh: "导入", ja: "インポート", ko: "가져오기")
         case "previous": return l(currentLang, en: "Previous", zh: "上一条", ja: "前へ", ko: "이전")

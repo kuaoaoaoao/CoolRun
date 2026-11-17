@@ -8,7 +8,7 @@ struct PredictionLearningCard: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var calibration: GoldStrategyCalibration {
-        summary.strategyCalibration
+        summary.strategyCalibration(lang: appSettings.language)
     }
 
     // 基于已验证样本解释本次校准的依据
@@ -72,7 +72,7 @@ struct PredictionLearningCard: View {
                 )
             }
 
-            Text(summary.calibrationText)
+            Text(summary.calibrationText(lang: appSettings.language))
                 .font(.system(size: 10))
                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
@@ -111,7 +111,7 @@ struct PredictionLearningCard: View {
 
                     // 解释为什么本次建议被调低/调高
                     if let calibrationReason {
-                        Text("\(calibration.note) · \(calibrationReason)")
+                        Text("\(calibration.note(lang: appSettings.language)) · \(calibrationReason)")
                             .font(.system(size: 10))
                             .foregroundStyle(AppTheme.textSecondary(colorScheme))
                             .fixedSize(horizontal: false, vertical: true)

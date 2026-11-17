@@ -52,106 +52,208 @@ final class CleanupAdvisor {
 
     private struct Template: Sendable {
         let id: String
-        let name: String
         let relativePath: String
-        let note: String
         let icon: String
         let risk: Risk
         let category: Category
+
+        func name(_ lang: AppLanguage) -> String {
+            CleanupAdvisor.localizedName(id, lang: lang)
+        }
+
+        func note(_ lang: AppLanguage) -> String {
+            CleanupAdvisor.localizedNote(id, lang: lang)
+        }
     }
 
     private nonisolated static let templates: [Template] = [
         Template(
             id: "caches",
-            name: "应用缓存",
             relativePath: "Library/Caches",
-            note: "各 App 的临时缓存。删掉后第一次打开会稍慢，之后自己重建。",
             icon: "shippingbox.fill",
             risk: .safe,
             category: .cache
         ),
         Template(
             id: "logs",
-            name: "运行日志",
             relativePath: "Library/Logs",
-            note: "系统和 App 的日志。删掉不影响功能，只是出问题时少了排查材料。",
             icon: "doc.text.fill",
             risk: .safe,
             category: .log
         ),
         Template(
             id: "derived-data",
-            name: "Xcode 编译缓存",
             relativePath: "Library/Developer/Xcode/DerivedData",
-            note: "编译中间产物。删掉后下次编译从头来，慢一点，但不会出错。",
             icon: "hammer.fill",
             risk: .safe,
             category: .developer
         ),
         Template(
             id: "device-support",
-            name: "真机调试符号",
             relativePath: "Library/Developer/Xcode/iOS DeviceSupport",
-            note: "调试真机用的系统符号。删掉后第一次连新系统的手机会重新下载。",
             icon: "iphone.gen3",
             risk: .safe,
             category: .developer
         ),
         Template(
             id: "simulator-caches",
-            name: "模拟器缓存",
             relativePath: "Library/Developer/CoreSimulator/Caches",
-            note: "模拟器运行时缓存，删了会自动重建。",
             icon: "square.stack.3d.up.fill",
             risk: .safe,
             category: .developer
         ),
         Template(
             id: "npm-cache",
-            name: "npm 缓存",
             relativePath: ".npm/_cacache",
-            note: "npm 下载过的包。删掉后装依赖会重新下载，已装好的项目不受影响。",
             icon: "cube.box.fill",
             risk: .safe,
             category: .package
         ),
         Template(
             id: "pnpm-store",
-            name: "pnpm 全局存储",
             relativePath: "Library/pnpm/store",
-            note: "pnpm 的包仓库。删掉后重装依赖会重新下载，已有 node_modules 仍可用。",
             icon: "cube.box.fill",
             risk: .safe,
             category: .package
         ),
         Template(
             id: "homebrew-cache",
-            name: "Homebrew 安装包缓存",
             relativePath: "Library/Caches/Homebrew",
-            note: "下载过的安装包。删掉后重装同一版本会重新下载。",
             icon: "mug.fill",
             risk: .safe,
             category: .package
         ),
         Template(
             id: "trash",
-            name: "废纸篓",
             relativePath: ".Trash",
-            note: "已经扔掉的東西。清空后无法恢复，先确认里面没有你还要的。",
             icon: "trash.fill",
             risk: .caution,
             category: .trash
         ),
         Template(
             id: "device-backups",
-            name: "iPhone / iPad 本地备份",
             relativePath: "Library/Application Support/MobileSync/Backup",
-            note: "这台电脑上的手机备份。删掉后本地就没有了，iCloud 备份不受影响。",
             icon: "iphone.and.arrow.forward",
             risk: .caution,
             category: .backup
         )
     ]
+
+    // MARK: - 条目文案
+
+    nonisolated private static func localizedName(_ id: String, lang: AppLanguage) -> String {
+        switch id {
+        case "caches":
+            return LocalizedString.l(lang, en: "App Caches", zh: "应用缓存", ja: "アプリのキャッシュ", ko: "앱 캐시")
+        case "logs":
+            return LocalizedString.l(lang, en: "Runtime Logs", zh: "运行日志", ja: "実行ログ", ko: "실행 로그")
+        case "derived-data":
+            return LocalizedString.l(lang, en: "Xcode Build Cache", zh: "Xcode 编译缓存", ja: "Xcode ビルドキャッシュ", ko: "Xcode 빌드 캐시")
+        case "device-support":
+            return LocalizedString.l(lang, en: "Device Debug Symbols", zh: "真机调试符号", ja: "実機デバッグシンボル", ko: "실기기 디버그 심볼")
+        case "simulator-caches":
+            return LocalizedString.l(lang, en: "Simulator Caches", zh: "模拟器缓存", ja: "シミュレータのキャッシュ", ko: "시뮬레이터 캐시")
+        case "npm-cache":
+            return LocalizedString.l(lang, en: "npm Cache", zh: "npm 缓存", ja: "npm キャッシュ", ko: "npm 캐시")
+        case "pnpm-store":
+            return LocalizedString.l(lang, en: "pnpm Global Store", zh: "pnpm 全局存储", ja: "pnpm グローバルストア", ko: "pnpm 전역 저장소")
+        case "homebrew-cache":
+            return LocalizedString.l(lang, en: "Homebrew Cache", zh: "Homebrew 安装包缓存", ja: "Homebrew パッケージキャッシュ", ko: "Homebrew 패키지 캐시")
+        case "trash":
+            return LocalizedString.l(lang, en: "Trash", zh: "废纸篓", ja: "ゴミ箱", ko: "휴지통")
+        case "device-backups":
+            return LocalizedString.l(lang, en: "iPhone / iPad Local Backups", zh: "iPhone / iPad 本地备份", ja: "iPhone / iPad のローカルバックアップ", ko: "iPhone / iPad 로컬 백업")
+        default:
+            return id
+        }
+    }
+
+    nonisolated private static func localizedNote(_ id: String, lang: AppLanguage) -> String {
+        switch id {
+        case "caches":
+            return LocalizedString.l(
+                lang,
+                en: "Temporary caches from each app. The first launch after deletion is a bit slower, then they rebuild themselves.",
+                zh: "各 App 的临时缓存。删掉后第一次打开会稍慢，之后自己重建。",
+                ja: "各アプリの一時キャッシュです。削除直後の初回起動は少し遅くなりますが、その後は自動で再作成されます。",
+                ko: "각 앱의 임시 캐시입니다. 삭제 후 첫 실행은 조금 느리지만 이후 스스로 다시 만들어집니다."
+            )
+        case "logs":
+            return LocalizedString.l(
+                lang,
+                en: "System and app logs. Deleting them does not affect functionality, you just lose material for troubleshooting.",
+                zh: "系统和 App 的日志。删掉不影响功能，只是出问题时少了排查材料。",
+                ja: "システムとアプリのログです。削除しても動作に影響はありませんが、問題発生時の調査材料が減ります。",
+                ko: "시스템과 앱 로그입니다. 삭제해도 기능에는 영향이 없지만 문제 발생 시 조사 자료가 줄어듭니다."
+            )
+        case "derived-data":
+            return LocalizedString.l(
+                lang,
+                en: "Build intermediates. The next build starts from scratch and takes longer, but nothing breaks.",
+                zh: "编译中间产物。删掉后下次编译从头来，慢一点，但不会出错。",
+                ja: "ビルドの中間生成物です。次回のビルドは最初からになり少し遅くなりますが、エラーにはなりません。",
+                ko: "빌드 중간 산출물입니다. 다음 빌드는 처음부터 시작해 조금 느려지지만 오류는 나지 않습니다."
+            )
+        case "device-support":
+            return LocalizedString.l(
+                lang,
+                en: "System symbols used for debugging physical devices. They re-download the first time you connect a phone on a new OS.",
+                zh: "调试真机用的系统符号。删掉后第一次连新系统的手机会重新下载。",
+                ja: "実機デバッグ用のシステムシンボルです。削除後、新しい OS の端末に初めて接続した際に再ダウンロードされます。",
+                ko: "실기기 디버깅용 시스템 심볼입니다. 삭제 후 새 OS 기기를 처음 연결할 때 다시 내려받습니다."
+            )
+        case "simulator-caches":
+            return LocalizedString.l(
+                lang,
+                en: "Simulator runtime caches, rebuilt automatically after deletion.",
+                zh: "模拟器运行时缓存，删了会自动重建。",
+                ja: "シミュレータの実行時キャッシュです。削除しても自動で再作成されます。",
+                ko: "시뮬레이터 런타임 캐시로, 삭제해도 자동으로 다시 만들어집니다."
+            )
+        case "npm-cache":
+            return LocalizedString.l(
+                lang,
+                en: "Packages downloaded by npm. Installing dependencies re-downloads them; projects already installed are unaffected.",
+                zh: "npm 下载过的包。删掉后装依赖会重新下载，已装好的项目不受影响。",
+                ja: "npm がダウンロードしたパッケージです。依存関係の導入時に再ダウンロードされますが、導入済みのプロジェクトには影響しません。",
+                ko: "npm이 내려받은 패키지입니다. 의존성을 설치할 때 다시 내려받지만 이미 설치된 프로젝트에는 영향이 없습니다."
+            )
+        case "pnpm-store":
+            return LocalizedString.l(
+                lang,
+                en: "The pnpm package store. Reinstalling dependencies re-downloads them; existing node_modules still work.",
+                zh: "pnpm 的包仓库。删掉后重装依赖会重新下载，已有 node_modules 仍可用。",
+                ja: "pnpm のパッケージストアです。依存関係の再導入時に再ダウンロードされますが、既存の node_modules はそのまま使えます。",
+                ko: "pnpm 패키지 저장소입니다. 의존성을 다시 설치할 때 재다운로드되지만 기존 node_modules는 그대로 사용할 수 있습니다."
+            )
+        case "homebrew-cache":
+            return LocalizedString.l(
+                lang,
+                en: "Downloaded installers. Reinstalling the same version re-downloads them.",
+                zh: "下载过的安装包。删掉后重装同一版本会重新下载。",
+                ja: "ダウンロード済みのインストーラです。同じバージョンを再インストールすると再ダウンロードされます。",
+                ko: "내려받은 설치 파일입니다. 같은 버전을 다시 설치하면 재다운로드됩니다."
+            )
+        case "trash":
+            return LocalizedString.l(
+                lang,
+                en: "Items you already threw away. Emptying is irreversible, so check nothing you still need is inside.",
+                zh: "已经扔掉的東西。清空后无法恢复，先确认里面没有你还要的。",
+                ja: "すでに捨てた項目です。空にすると元に戻せないので、必要なものが残っていないか確認してください。",
+                ko: "이미 버린 항목입니다. 비우면 되돌릴 수 없으니 필요한 것이 없는지 먼저 확인하세요."
+            )
+        case "device-backups":
+            return LocalizedString.l(
+                lang,
+                en: "Phone backups stored on this Mac. Deleting them removes the local copy; iCloud backups are unaffected.",
+                zh: "这台电脑上的手机备份。删掉后本地就没有了，iCloud 备份不受影响。",
+                ja: "この Mac 上の端末バックアップです。削除するとローカルには残りませんが、iCloud バックアップには影響しません。",
+                ko: "이 Mac에 있는 기기 백업입니다. 삭제하면 로컬에는 남지 않지만 iCloud 백업에는 영향이 없습니다."
+            )
+        default:
+            return ""
+        }
+    }
 
     private(set) var items: [Item] = []
     private(set) var isScanning = false
@@ -177,7 +279,14 @@ final class CleanupAdvisor {
         guard !isScanning else { return }
         isScanning = true
         lastError = nil
-        progressText = "正在看哪些能清…"
+        let lang = AppSettings.shared.language
+        progressText = LocalizedString.l(
+            lang,
+            en: "Checking what can be cleaned…",
+            zh: "正在看哪些能清…",
+            ja: "何を削除できるか確認中…",
+            ko: "무엇을 정리할 수 있는지 확인 중…"
+        )
         defer {
             isScanning = false
             progressText = nil
@@ -194,8 +303,8 @@ final class CleanupAdvisor {
             collected.append(
                 Item(
                     id: template.id,
-                    name: template.name,
-                    note: template.note,
+                    name: template.name(lang),
+                    note: template.note(lang),
                     icon: template.icon,
                     risk: template.risk,
                     category: template.category,
@@ -206,7 +315,13 @@ final class CleanupAdvisor {
             )
         }
 
-        progressText = "正在找大文件…"
+        progressText = LocalizedString.l(
+            lang,
+            en: "Looking for large files…",
+            zh: "正在找大文件…",
+            ja: "大きなファイルを探しています…",
+            ko: "큰 파일을 찾는 중…"
+        )
         let largeFiles = await Self.largeFiles(in: home)
         collected.append(contentsOf: largeFiles)
 

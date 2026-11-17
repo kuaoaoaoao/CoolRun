@@ -7,6 +7,9 @@ struct GoldPositionCard: View {
     let advice: GoldHoldingAdvice?
     let hasInput: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var settings = AppSettings.shared
+
+    private var lang: AppLanguage { settings.language }
 
     private var tint: Color {
         guard let advice else {
@@ -25,18 +28,18 @@ struct GoldPositionCard: View {
 
     private var statusText: String {
         guard let advice else {
-            return hasInput ? LocalizedString.gold("check_input") : LocalizedString.gold("not_filled")
+            return hasInput ? LocalizedString.gold("check_input", lang: lang) : LocalizedString.gold("not_filled", lang: lang)
         }
 
-        if advice.profitLoss > 0 { return LocalizedString.gold("floating_profit") }
-        if advice.profitLoss < 0 { return LocalizedString.gold("floating_loss") }
-        return LocalizedString.gold("break_even")
+        if advice.profitLoss > 0 { return LocalizedString.gold("floating_profit", lang: lang) }
+        if advice.profitLoss < 0 { return LocalizedString.gold("floating_loss", lang: lang) }
+        return LocalizedString.gold("break_even", lang: lang)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Label(LocalizedString.gold("my_gold"), systemImage: "person.crop.circle.badge.checkmark")
+                Label(LocalizedString.gold("my_gold", lang: lang), systemImage: "person.crop.circle.badge.checkmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppTheme.textPrimary(colorScheme))
                 Spacer(minLength: 6)
@@ -50,14 +53,14 @@ struct GoldPositionCard: View {
 
             HStack(spacing: 6) {
                 PositionInputField(
-                    title: LocalizedString.gold("holding_grams"),
-                    placeholder: LocalizedString.gold("example_grams"),
+                    title: LocalizedString.gold("holding_grams", lang: lang),
+                    placeholder: LocalizedString.gold("example_grams", lang: lang),
                     suffix: "g",
                     text: $gramsText
                 )
                 PositionInputField(
-                    title: LocalizedString.gold("average_cost"),
-                    placeholder: LocalizedString.gold("example_price"),
+                    title: LocalizedString.gold("average_cost", lang: lang),
+                    placeholder: LocalizedString.gold("example_price", lang: lang),
                     suffix: "¥/g",
                     text: $averageCostText
                 )
@@ -66,10 +69,10 @@ struct GoldPositionCard: View {
             if let advice {
                 VStack(spacing: 6) {
                     HStack(spacing: 6) {
-                        PositionMetric(title: LocalizedString.gold("cost"), value: "¥\(advice.costBasis.moneyNumber)")
-                        PositionMetric(title: LocalizedString.gold("market_value"), value: "¥\(advice.marketValue.moneyNumber)")
+                        PositionMetric(title: LocalizedString.gold("cost", lang: lang), value: "¥\(advice.costBasis.moneyNumber)")
+                        PositionMetric(title: LocalizedString.gold("market_value", lang: lang), value: "¥\(advice.marketValue.moneyNumber)")
                         PositionMetric(
-                            title: advice.profitLoss >= 0 ? LocalizedString.gold("profit") : LocalizedString.gold("loss"),
+                            title: advice.profitLoss >= 0 ? LocalizedString.gold("profit", lang: lang) : LocalizedString.gold("loss", lang: lang),
                             value: "\(advice.profitLoss.signedMoneyNumber)"
                         )
                     }
@@ -112,7 +115,7 @@ struct GoldPositionCard: View {
                     }
                 }
             } else {
-                Text(hasInput ? LocalizedString.gold("position_input_invalid") : LocalizedString.gold("position_input_hint"))
+                Text(hasInput ? LocalizedString.gold("position_input_invalid", lang: lang) : LocalizedString.gold("position_input_hint", lang: lang))
                     .font(.system(size: 10))
                     .foregroundStyle(AppTheme.textSecondary(colorScheme))
                     .fixedSize(horizontal: false, vertical: true)

@@ -14,8 +14,11 @@ struct AgentToolsBrowser: View {
     @State private var isRunning = false
     @State private var confirmArmed = false
 
+    @ObservedObject private var appSettings = AppSettings.shared
+
     private var registry: ToolRegistry { .shared }
     private var settings: AgentSettings { .shared }
+    private var lang: AppLanguage { appSettings.language }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,16 +51,20 @@ struct AgentToolsBrowser: View {
                     .font(.system(size: 11, weight: .semibold))
             }
             .buttonStyle(.plain)
-            .help(selectedName == nil ? "返回对话" : "返回工具列表")
+            .help(
+                selectedName == nil
+                    ? LocalizedString.l(lang, en: "Back to chat", zh: "返回对话", ja: "会話に戻る", ko: "대화로 돌아가기")
+                    : LocalizedString.l(lang, en: "Back to tool list", zh: "返回工具列表", ja: "ツール一覧に戻る", ko: "도구 목록으로 돌아가기")
+            )
 
-            Text(selectedName == nil ? "工具" : (selectedName ?? ""))
+            Text(selectedName == nil ? LocalizedString.l(lang, en: "Tools", zh: "工具", ja: "ツール", ko: "도구") : (selectedName ?? ""))
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
 
             Spacer(minLength: 0)
 
             if selectedName == nil {
-                Text("\(registry.allDescriptors.count) 个")
+                Text(LocalizedString.l(lang, en: "\(registry.allDescriptors.count) tools", zh: "\(registry.allDescriptors.count) 个", ja: "\(registry.allDescriptors.count) 個", ko: "\(registry.allDescriptors.count)개"))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -90,7 +97,7 @@ struct AgentToolsBrowser: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
-                TextField("搜索工具", text: $query)
+                TextField(LocalizedString.l(lang, en: "Search tools", zh: "搜索工具", ja: "ツールを検索", ko: "도구 검색"), text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                 if !query.isEmpty {
@@ -197,7 +204,7 @@ struct AgentToolsBrowser: View {
                         .padding(.vertical, 2)
                         .background(Color.primary.opacity(0.07), in: Capsule())
                     if !allowed {
-                        Text("当前等级未开启")
+                        Text(LocalizedString.l(lang, en: "Disabled at current level", zh: "当前等级未开启", ja: "現在のレベルでは無効", ko: "현재 레벨에서 사용 안 함"))
                             .font(.system(size: 9))
                             .foregroundStyle(.orange)
                     }
@@ -209,7 +216,15 @@ struct AgentToolsBrowser: View {
                 }
 
                 if !allowed {
-                    Text("在设置里把工具等级调到 L\(tool.permission.rawValue) 才能运行。")
+                    Text(
+                        LocalizedString.l(
+                            lang,
+                            en: "Raise the tool level to L\(tool.permission.rawValue) in Settings to run this.",
+                            zh: "在设置里把工具等级调到 L\(tool.permission.rawValue) 才能运行。",
+                            ja: "設定でツールレベルを L\(tool.permission.rawValue) に上げると実行できます。",
+                            ko: "설정에서 도구 레벨을 L\(tool.permission.rawValue)로 올려야 실행할 수 있습니다."
+                        )
+                    )
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -223,7 +238,11 @@ struct AgentToolsBrowser: View {
                             Image(systemName: result.isError ? "exclamationmark.circle" : "checkmark.circle")
                                 .font(.system(size: 10))
                                 .foregroundStyle(result.isError ? .red : .green)
-                            Text(result.isError ? "失败" : "结果")
+                            Text(
+                                result.isError
+                                    ? LocalizedString.l(lang, en: "Failed", zh: "失败", ja: "失敗", ko: "실패")
+                                    : LocalizedString.l(lang, en: "Result", zh: "结果", ja: "結果", ko: "결과")
+                            )
                                 .font(.system(size: 10, weight: .medium))
                             Spacer(minLength: 0)
                             Button {
@@ -235,7 +254,7 @@ struct AgentToolsBrowser: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
-                            .help("复制结果")
+                            .help(LocalizedString.l(lang, en: "Copy result", zh: "复制结果", ja: "結果をコピー", ko: "결과 복사"))
                         }
                         Text(result.content)
                             .font(.system(size: 10, design: .monospaced))
@@ -266,7 +285,11 @@ struct AgentToolsBrowser: View {
                     Image(systemName: confirmArmed ? "checkmark.shield" : "play.fill")
                         .font(.system(size: 9))
                 }
-                Text(confirmArmed ? "确认执行（会写入）" : "运行")
+                Text(
+                    confirmArmed
+                        ? LocalizedString.l(lang, en: "Confirm run (writes data)", zh: "确认执行（会写入）", ja: "実行を確認（書き込みあり）", ko: "실행 확인(쓰기 발생)")
+                        : LocalizedString.l(lang, en: "Run", zh: "运行", ja: "実行", ko: "실행")
+                )
                     .font(.system(size: 11, weight: .medium))
             }
             .frame(maxWidth: .infinity)

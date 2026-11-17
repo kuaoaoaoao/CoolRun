@@ -8,7 +8,8 @@ final class GoldPositionAdvisorTests: XCTestCase {
             grams: 0,
             averageCost: 700,
             report: nil,
-            signal: nil
+            signal: nil,
+            lang: .chinese
         ))
     }
 
@@ -18,7 +19,8 @@ final class GoldPositionAdvisorTests: XCTestCase {
             grams: 10,
             averageCost: 700,
             report: nil,
-            signal: nil
+            signal: nil,
+            lang: .chinese
         ))
 
         XCTAssertEqual(advice.costBasis, 7_000, accuracy: 0.001)

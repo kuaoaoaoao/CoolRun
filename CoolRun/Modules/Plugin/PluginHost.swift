@@ -15,10 +15,11 @@ enum PluginHost {
         manifest: PluginManifest,
         spec: PluginToolSpec,
         arguments: JSONValue,
-        root: URL
+        root: URL,
+        lang: AppLanguage
     ) async -> ToolResult {
         await Task.detached(priority: .userInitiated) {
-            run(manifest: manifest, spec: spec, arguments: arguments, root: root)
+            run(manifest: manifest, spec: spec, arguments: arguments, root: root, lang: lang)
         }.value
     }
 
@@ -28,39 +29,94 @@ enum PluginHost {
         manifest: PluginManifest,
         spec: PluginToolSpec,
         arguments: JSONValue,
-        root: URL
+        root: URL,
+        lang: AppLanguage
     ) -> ToolResult {
         let scriptURL = root.appendingPathComponent(manifest.mainScript)
         guard let script = try? String(contentsOf: scriptURL, encoding: .utf8) else {
-            return .failure("插件脚本读不到：\(manifest.mainScript)")
+            return .failure(
+                LocalizedString.l(
+                    lang,
+                    en: "Cannot read the plugin script: \(manifest.mainScript)",
+                    zh: "插件脚本读不到：\(manifest.mainScript)",
+                    ja: "プラグインスクリプトを読み込めません：\(manifest.mainScript)",
+                    ko: "플러그인 스크립트를 읽을 수 없습니다: \(manifest.mainScript)"
+                )
+            )
         }
 
         guard let context = JSContext() else {
-            return .failure("无法创建 JavaScript 运行时")
+            return .failure(
+                LocalizedString.l(
+                    lang,
+                    en: "Cannot create a JavaScript runtime",
+                    zh: "无法创建 JavaScript 运行时",
+                    ja: "JavaScript ランタイムを作成できません",
+                    ko: "JavaScript 런타임을 만들 수 없습니다"
+                )
+            )
         }
 
         var jsError: String?
         context.exceptionHandler = { _, exception in
-            jsError = exception?.toString() ?? "未知脚本错误"
+            jsError = exception?.toString() ?? LocalizedString.l(
+                lang,
+                en: "Unknown script error",
+                zh: "未知脚本错误",
+                ja: "不明なスクリプトエラー",
+                ko: "알 수 없는 스크립트 오류"
+            )
         }
 
         installAPI(in: context, manifest: manifest, root: root)
 
         context.evaluateScript(script)
         if let jsError {
-            return .failure("插件脚本报错：\(jsError)")
+            return .failure(
+                LocalizedString.l(
+                    lang,
+                    en: "Plugin script error: \(jsError)",
+                    zh: "插件脚本报错：\(jsError)",
+                    ja: "プラグインスクリプトのエラー：\(jsError)",
+                    ko: "플러그인 스크립트 오류: \(jsError)"
+                )
+            )
         }
 
         let argsJSON = arguments.compactJSONString()
         let call = "\(spec.handler)(\(argsJSON))"
         guard let value = context.evaluateScript(call) else {
-            return .failure("插件没有返回结果")
+            return .failure(
+                LocalizedString.l(
+                    lang,
+                    en: "The plugin returned no result",
+                    zh: "插件没有返回结果",
+                    ja: "プラグインが結果を返しませんでした",
+                    ko: "플러그인이 결과를 반환하지 않았습니다"
+                )
+            )
         }
         if let jsError {
-            return .failure("插件执行失败：\(jsError)")
+            return .failure(
+                LocalizedString.l(
+                    lang,
+                    en: "Plugin execution failed: \(jsError)",
+                    zh: "插件执行失败：\(jsError)",
+                    ja: "プラグインの実行に失敗しました：\(jsError)",
+                    ko: "플러그인 실행 실패: \(jsError)"
+                )
+            )
         }
         if value.isUndefined || value.isNull {
-            return .text("插件执行完成，没有返回值")
+            return .text(
+                LocalizedString.l(
+                    lang,
+                    en: "The plugin finished without returning a value",
+                    zh: "插件执行完成，没有返回值",
+                    ja: "プラグインは値を返さずに完了しました",
+                    ko: "플러그인이 값을 반환하지 않고 완료되었습니다"
+                )
+            )
         }
 
         return .text(value.toString() ?? "")
@@ -175,7 +231,7 @@ enum PluginHost {
         // 因为插件连本地模型（11434）是正当用法。
         if Self.targetsLocalAgentPort(url) {
             FileHandle.standardError.write(
-                Data("[Plugin] 拒绝访问本地 Agent 端口：\(url.absoluteString)\n".utf8)
+                Data("[Plugin] blocked request to local Agent port: \(url.absoluteString)\n".utf8)
             )
             return ""
         }

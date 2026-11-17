@@ -31,7 +31,15 @@ final class ClipboardHistoryStore {
     /// 都会卡一下。64 KB 足够放下一屏代码或一篇短文。
     nonisolated static let textByteLimit = 64 * 1024
     nonisolated static let monitoringDefaultsKey = "clipboard_history_monitoring_enabled"
-    nonisolated static let truncationMarker = "\n…（超过 64 KB 的部分没有保存）"
+    nonisolated static func truncationMarker(lang: AppLanguage) -> String {
+        "\n" + LocalizedString.l(
+            lang,
+            en: "… (the part over 64 KB was not saved)",
+            zh: "…（超过 64 KB 的部分没有保存）",
+            ja: "…（64 KB を超える部分は保存されていません）",
+            ko: "… (64 KB를 넘는 부분은 저장되지 않았습니다)"
+        )
+    }
 
     private(set) var entries: [ClipboardHistoryEntry] = []
     /// 内容版本号。视图监听它而不是直接监听 `entries`：
@@ -121,7 +129,7 @@ final class ClipboardHistoryStore {
     /// Internal entry point used by pasteboard polling and deterministic tests.
     func ingest(_ text: String, at now: Date = Date()) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let text = Self.clamped(text)
+        let text = Self.clamped(text, lang: AppSettings.shared.language)
 
         if let existingIndex = entries.firstIndex(where: { $0.text == text }) {
             var existing = entries.remove(at: existingIndex)
@@ -136,11 +144,11 @@ final class ClipboardHistoryStore {
     }
 
     /// 超长文本按 UTF-8 字节截断，并留一句说明，避免"复制回去少了半截"的困惑。
-    nonisolated static func clamped(_ text: String) -> String {
+    nonisolated static func clamped(_ text: String, lang: AppLanguage) -> String {
         let utf8 = text.utf8
         guard utf8.count > textByteLimit else { return text }
         let head = String(decoding: utf8.prefix(textByteLimit), as: UTF8.self)
-        return head + truncationMarker
+        return head + truncationMarker(lang: lang)
     }
 
     nonisolated static func retained(
@@ -205,7 +213,7 @@ final class ClipboardHistoryStore {
         // 截断后写回一次，之后就不会再触发。
         var trimmed = false
         let migrated = loaded.map { entry -> ClipboardHistoryEntry in
-            let clamped = Self.clamped(entry.text)
+            let clamped = Self.clamped(entry.text, lang: AppSettings.shared.language)
             guard clamped != entry.text else { return entry }
             trimmed = true
             return ClipboardHistoryEntry(

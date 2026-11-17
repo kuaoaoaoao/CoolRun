@@ -74,7 +74,7 @@ enum AgentActionTools {
                 return .failure("未知模块：\(raw)。可用值：\(ViewMode.allCases.map(\.rawValue).joined(separator: "、"))")
             }
             AppNavigationRouter.shared.open(mode)
-            return .text("已切换到「\(mode.rawValue)」面板。")
+            return .text("已切换到「\(mode.displayName)」面板。")
         }
     }
 

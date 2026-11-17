@@ -260,6 +260,10 @@ struct GoldAnalysisView: View {
             // 设置页切换自动校准后立即重算，不等下一次金价刷新
             viewModel.refresh(records: store.records, candlePeriod: candlePeriod)
         }
+        .onChange(of: appSettings.language) { _, _ in
+            // 切换界面语言后重算，引擎生成的文案跟随语言变化
+            viewModel.refresh(records: store.records, candlePeriod: candlePeriod)
+        }
         .onChange(of: holdingGramsText) { _, newValue in
             capturePositionIfValid()
             CloudSyncStore.shared.setString(newValue, for: .goldHoldingGrams)
@@ -524,7 +528,7 @@ struct GoldAnalysisView: View {
                             .frame(width: 4, height: candleHeight(candle, maximumChange: maximumChange) * 0.68)
                             .frame(maxHeight: 30, alignment: candle.isUp ? .bottom : .top)
                             .opacity(0.82)
-                            .help("\(candle.period.rawValue) \(candle.changePercent.signedPercentText)")
+                            .help("\(candle.period.displayName) \(candle.changePercent.signedPercentText)")
                     }
                 }
             }
@@ -637,8 +641,8 @@ struct GoldAnalysisView: View {
     private func indicatorGrid(snapshot: TechnicalSnapshot) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                IndicatorPill(title: "RSI", value: snapshot.rsi14?.shortNumber ?? "--", detail: snapshot.rsiState.rawValue)
-                IndicatorPill(title: "MACD", value: snapshot.macdHistogram?.signedShortNumber ?? "--", detail: snapshot.macdState.rawValue)
+                IndicatorPill(title: "RSI", value: snapshot.rsi14?.shortNumber ?? "--", detail: snapshot.rsiState.displayName)
+                IndicatorPill(title: "MACD", value: snapshot.macdHistogram?.signedShortNumber ?? "--", detail: snapshot.macdState.displayName)
             }
             HStack(spacing: 6) {
                 IndicatorPill(title: "SMA20", value: snapshot.sma20?.goldPriceNumber ?? "--", detail: LocalizedString.gold("sma", lang: appSettings.language))
@@ -740,7 +744,8 @@ struct GoldAnalysisView: View {
             grams: grams,
             averageCost: averageCost,
             report: viewModel.advancedReport,
-            signal: viewModel.signal
+            signal: viewModel.signal,
+            lang: appSettings.language
         )
     }
 
@@ -752,8 +757,8 @@ struct GoldAnalysisView: View {
             .replacingOccurrences(of: "。", with: ".")
             .replacingOccurrences(of: "¥", with: "")
             .replacingOccurrences(of: "￥", with: "")
-            .replacingOccurrences(of: "元", with: "")
-            .replacingOccurrences(of: "克", with: "")
+            .replacingOccurrences(of: "元", with: "")  // i18n-allow: 解析用户输入的单位后缀
+            .replacingOccurrences(of: "克", with: "")  // i18n-allow: 解析用户输入的单位后缀
             .replacingOccurrences(of: "g", with: "")
             .replacingOccurrences(of: "G", with: "")
             .replacingOccurrences(of: " ", with: "")

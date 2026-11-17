@@ -132,9 +132,18 @@ final class AgentSettings {
     }
 
     func makeConfig() throws -> AgentRunConfig {
+        let lang = AppSettings.shared.language
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if protocolKind.requiresAPIKey && trimmedKey.isEmpty {
-            throw AgentError.missingCredentials("还没有配置 \(protocolKind.displayName) 的 API Key。")
+            throw AgentError.missingCredentials(
+                LocalizedString.l(
+                    lang,
+                    en: "No API key configured for \(protocolKind.displayName) yet.",
+                    zh: "还没有配置 \(protocolKind.displayName) 的 API Key。",
+                    ja: "\(protocolKind.displayName) の API キーがまだ設定されていません。",
+                    ko: "\(protocolKind.displayName)의 API 키가 아직 설정되지 않았습니다."
+                )
+            )
         }
 
         let trimmedBase = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -144,7 +153,15 @@ final class AgentSettings {
 
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedModel.isEmpty else {
-            throw AgentError.missingCredentials("还没有填写模型名称。")
+            throw AgentError.missingCredentials(
+                LocalizedString.l(
+                    lang,
+                    en: "Model name is still empty.",
+                    zh: "还没有填写模型名称。",
+                    ja: "モデル名がまだ入力されていません。",
+                    ko: "모델 이름이 아직 입력되지 않았습니다."
+                )
+            )
         }
 
         return AgentRunConfig(
@@ -152,7 +169,8 @@ final class AgentSettings {
             apiKey: trimmedKey,
             baseURL: trimmedBase,
             model: trimmedModel,
-            maxRounds: max(maxRounds, 1)
+            maxRounds: max(maxRounds, 1),
+            lang: lang
         )
     }
 

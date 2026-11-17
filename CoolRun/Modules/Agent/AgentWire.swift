@@ -56,10 +56,18 @@ nonisolated enum WireSupport {
         return String(data: data, encoding: .utf8) ?? "Unknown error"
     }
 
-    static func openStream(_ request: URLRequest) async throws -> URLSession.AsyncBytes {
+    static func openStream(_ request: URLRequest, lang: AppLanguage) async throws -> URLSession.AsyncBytes {
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw AgentError.invalidResponse("非 HTTP 响应")
+            throw AgentError.invalidResponse(
+                LocalizedString.l(
+                    lang,
+                    en: "Not an HTTP response",
+                    zh: "非 HTTP 响应",
+                    ja: "HTTP レスポンスではありません",
+                    ko: "HTTP 응답이 아닙니다"
+                )
+            )
         }
         guard http.statusCode == 200 else {
             var data = Data()
@@ -114,7 +122,7 @@ struct OpenAIChatWire: AgentWire {
         }
         request.httpBody = try JSONEncoder().encode(JSONValue.object(body))
 
-        let bytes = try await WireSupport.openStream(request)
+        let bytes = try await WireSupport.openStream(request, lang: config.lang)
 
         return AsyncThrowingStream { continuation in
             Task {
@@ -244,7 +252,7 @@ struct OpenAIResponsesWire: AgentWire {
         }
         request.httpBody = try JSONEncoder().encode(JSONValue.object(body))
 
-        let bytes = try await WireSupport.openStream(request)
+        let bytes = try await WireSupport.openStream(request, lang: config.lang)
 
         return AsyncThrowingStream { continuation in
             Task {
@@ -293,7 +301,13 @@ struct OpenAIResponsesWire: AgentWire {
                         case "response.failed", "error":
                             let message = value["error"]?["message"]?.stringValue
                                 ?? value["response"]?["error"]?["message"]?.stringValue
-                                ?? "Responses API 返回错误"
+                                ?? LocalizedString.l(
+                                    config.lang,
+                                    en: "The Responses API returned an error",
+                                    zh: "Responses API 返回错误",
+                                    ja: "Responses API がエラーを返しました",
+                                    ko: "Responses API가 오류를 반환했습니다"
+                                )
                             throw AgentError.invalidResponse(message)
                         default:
                             break
@@ -392,7 +406,7 @@ struct AnthropicWire: AgentWire {
         }
         request.httpBody = try JSONEncoder().encode(JSONValue.object(body))
 
-        let bytes = try await WireSupport.openStream(request)
+        let bytes = try await WireSupport.openStream(request, lang: config.lang)
 
         return AsyncThrowingStream { continuation in
             Task {
@@ -441,7 +455,14 @@ struct AnthropicWire: AgentWire {
                             continuation.yield(.finished(reason: "end_turn"))
                         case "error":
                             throw AgentError.invalidResponse(
-                                value["error"]?.compactJSONString() ?? "Anthropic 返回错误"
+                                value["error"]?.compactJSONString()
+                                    ?? LocalizedString.l(
+                                        config.lang,
+                                        en: "Anthropic returned an error",
+                                        zh: "Anthropic 返回错误",
+                                        ja: "Anthropic がエラーを返しました",
+                                        ko: "Anthropic이 오류를 반환했습니다"
+                                    )
                             )
                         default:
                             break
@@ -548,7 +569,7 @@ struct OllamaWire: AgentWire {
         }
         request.httpBody = try JSONEncoder().encode(JSONValue.object(body))
 
-        let bytes = try await WireSupport.openStream(request)
+        let bytes = try await WireSupport.openStream(request, lang: config.lang)
 
         return AsyncThrowingStream { continuation in
             Task {

@@ -134,32 +134,68 @@ struct GoldPredictionLearningSummary: Equatable, Sendable {
     let averagePredictionBias: Double?
     let latestValidatedAt: Date?
 
-    var calibrationText: String {
+    nonisolated func calibrationText(lang: AppLanguage) -> String {
         guard validatedCount >= 8, let hitRate else {
-            return "样本积累中，先记录不自动调参"
+            return LocalizedString.l(
+                lang,
+                en: "Collecting samples; record only, no auto-tuning yet",
+                zh: "样本积累中，先记录不自动调参",
+                ja: "サンプル蓄積中。記録のみで自動調整はまだ行いません",
+                ko: "샘플을 쌓는 중이라 기록만 하고 자동 조정은 하지 않습니다"
+            )
         }
 
         if hitRate >= 0.62 {
-            return "近期方向命中率较好，可继续观察"
+            return LocalizedString.l(
+                lang,
+                en: "Recent hit rate is decent; keep observing",
+                zh: "近期方向命中率较好，可继续观察",
+                ja: "直近の的中率は良好です。引き続き観察しましょう",
+                ko: "최근 적중률이 양호합니다. 계속 지켜보세요"
+            )
         }
 
         if hitRate <= 0.42 {
-            return "近期方向偏差较大，后续应降低信心权重"
+            return LocalizedString.l(
+                lang,
+                en: "Recent direction bias is large; lower the confidence weight later",
+                zh: "近期方向偏差较大，后续应降低信心权重",
+                ja: "直近は方向のずれが大きく、今後は信頼度の重みを下げるべきです",
+                ko: "최근 방향 편차가 커서 이후 신뢰도 가중치를 낮추는 편이 좋습니다"
+            )
         }
 
         if let averagePredictionBias {
             if averagePredictionBias > 0.002 {
-                return "预测略偏乐观，买入建议需更保守"
+                return LocalizedString.l(
+                    lang,
+                    en: "Forecasts lean optimistic; buy calls should be more conservative",
+                    zh: "预测略偏乐观，买入建议需更保守",
+                    ja: "予測はやや楽観寄りです。買いの提案はより慎重にすべきです",
+                    ko: "예측이 다소 낙관적이라 매수 제안은 더 보수적이어야 합니다"
+                )
             }
             if averagePredictionBias < -0.002 {
-                return "预测略偏保守，可观察是否漏掉上行"
+                return LocalizedString.l(
+                    lang,
+                    en: "Forecasts lean conservative; watch whether upside is being missed",
+                    zh: "预测略偏保守，可观察是否漏掉上行",
+                    ja: "予測はやや保守寄りです。上昇機会を逃していないか観察しましょう",
+                    ko: "예측이 다소 보수적이라 상승 기회를 놓치는지 지켜볼 만합니다"
+                )
             }
         }
 
-        return "预测表现接近中性，继续积累样本"
+        return LocalizedString.l(
+            lang,
+            en: "Prediction quality is near neutral; keep collecting samples",
+            zh: "预测表现接近中性，继续积累样本",
+            ja: "予測性能はほぼ中立です。サンプルを蓄積し続けましょう",
+            ko: "예측 성과가 거의 중립적이라 샘플을 계속 쌓으세요"
+        )
     }
 
-    var strategyCalibration: GoldStrategyCalibration {
+    nonisolated func strategyCalibration(lang: AppLanguage) -> GoldStrategyCalibration {
         guard validatedCount >= 8, let hitRate else {
             return .neutral
         }
@@ -168,7 +204,13 @@ struct GoldPredictionLearningSummary: Equatable, Sendable {
             return GoldStrategyCalibration(
                 confidenceMultiplier: 0.82,
                 exposureMultiplier: 0.72,
-                note: "近期方向命中率偏低，已自动降低信心和仓位"
+                note: LocalizedString.l(
+                    lang,
+                    en: "Recent hit rate is low; confidence and exposure were reduced automatically",
+                    zh: "近期方向命中率偏低，已自动降低信心和仓位",
+                    ja: "直近の的中率が低いため、信頼度と建玉を自動で下げました",
+                    ko: "최근 적중률이 낮아 신뢰도와 비중을 자동으로 낮췄습니다"
+                )
             )
         }
 
@@ -176,7 +218,13 @@ struct GoldPredictionLearningSummary: Equatable, Sendable {
             return GoldStrategyCalibration(
                 confidenceMultiplier: 0.90,
                 exposureMultiplier: 0.82,
-                note: "近期预测偏乐观，买入建议已自动保守"
+                note: LocalizedString.l(
+                    lang,
+                    en: "Recent forecasts lean optimistic; buy calls were made more conservative",
+                    zh: "近期预测偏乐观，买入建议已自动保守",
+                    ja: "直近の予測が楽観寄りのため、買いの提案を自動で慎重にしました",
+                    ko: "최근 예측이 낙관적이라 매수 제안을 자동으로 보수적으로 바꿨습니다"
+                )
             )
         }
 
@@ -184,14 +232,26 @@ struct GoldPredictionLearningSummary: Equatable, Sendable {
             return GoldStrategyCalibration(
                 confidenceMultiplier: 1.05,
                 exposureMultiplier: 1.03,
-                note: "近期方向命中率较好，维持略积极校准"
+                note: LocalizedString.l(
+                    lang,
+                    en: "Recent hit rate is decent; keep a slightly positive calibration",
+                    zh: "近期方向命中率较好，维持略积极校准",
+                    ja: "直近の的中率が良好なため、やや前向きな補正を維持します",
+                    ko: "최근 적중률이 양호해 다소 적극적인 보정을 유지합니다"
+                )
             )
         }
 
         return GoldStrategyCalibration(
             confidenceMultiplier: 1,
             exposureMultiplier: 0.94,
-            note: "近期表现中性，仓位略保守"
+            note: LocalizedString.l(
+                lang,
+                en: "Recent performance is neutral; exposure stays slightly conservative",
+                zh: "近期表现中性，仓位略保守",
+                ja: "直近の成績は中立です。建玉はやや保守的にします",
+                ko: "최근 성과가 중립적이라 비중은 다소 보수적으로 둡니다"
+            )
         )
     }
 }

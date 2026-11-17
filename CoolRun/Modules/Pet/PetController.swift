@@ -508,6 +508,9 @@ struct PetRootView: View {
     var animates: Bool = true
 
     private var model: PetModel { PetModel.shared }
+    @ObservedObject private var settings = AppSettings.shared
+
+    private var lang: AppLanguage { settings.language }
 
     var body: some View {
         WhalePetView(animated: animates)
@@ -536,9 +539,17 @@ struct PetRootView: View {
                 handleTap()
             }
             .contextMenu {
-                Button("打开 Agent") { PetController.shared.openAgent() }
-                Button("跟她说句话") { PetController.shared.speak() }
-                Button(model.isSleeping ? "叫醒她" : "让她睡会儿") {
+                Button(LocalizedString.l(lang, en: "Open Agent", zh: "打开 Agent", ja: "Agent を開く", ko: "Agent 열기")) {
+                    PetController.shared.openAgent()
+                }
+                Button(LocalizedString.l(lang, en: "Say hi to her", zh: "跟她说句话", ja: "声をかける", ko: "말 걸기")) {
+                    PetController.shared.speak()
+                }
+                Button(
+                    model.isSleeping
+                        ? LocalizedString.l(lang, en: "Wake her up", zh: "叫醒她", ja: "起こす", ko: "깨우기")
+                        : LocalizedString.l(lang, en: "Let her nap", zh: "让她睡会儿", ja: "少し寝かせる", ko: "재우기")
+                ) {
                     if model.isSleeping {
                         PetController.shared.speak()
                     } else {
@@ -546,18 +557,31 @@ struct PetRootView: View {
                     }
                 }
                 Divider()
-                Picker("大小", selection: Binding(
-                    get: { PetController.shared.scale },
-                    set: { PetController.shared.setScale($0) }
-                )) {
-                    Text("小").tag(CGFloat(0.8))
-                    Text("中").tag(CGFloat(1.0))
-                    Text("大").tag(CGFloat(1.25))
+                Picker(
+                    LocalizedString.l(lang, en: "Size", zh: "大小", ja: "サイズ", ko: "크기"),
+                    selection: Binding(
+                        get: { PetController.shared.scale },
+                        set: { PetController.shared.setScale($0) }
+                    )
+                ) {
+                    Text(LocalizedString.l(lang, en: "Small", zh: "小", ja: "小", ko: "작게")).tag(CGFloat(0.8))
+                    Text(LocalizedString.l(lang, en: "Medium", zh: "中", ja: "中", ko: "보통")).tag(CGFloat(1.0))
+                    Text(LocalizedString.l(lang, en: "Large", zh: "大", ja: "大", ko: "크게")).tag(CGFloat(1.25))
                 }
                 Divider()
-                Button("隐藏桌宠") { PetController.shared.hide() }
+                Button(LocalizedString.l(lang, en: "Hide Pet", zh: "隐藏桌宠", ja: "ペットを隠す", ko: "펫 숨기기")) {
+                    PetController.shared.hide()
+                }
             }
-            .help("点一下逗她，双击打开 Agent，按住可以拖来拖去，甩出去她会飞")
+            .help(
+                LocalizedString.l(
+                    lang,
+                    en: "Click to poke her, double-click to open Agent, hold to drag, throw her and she'll fly",
+                    zh: "点一下逗她，双击打开 Agent，按住可以拖来拖去，甩出去她会飞",
+                    ja: "クリックでつつく、ダブルクリックで Agent を開く、長押しでドラッグ、投げると飛びます",
+                    ko: "클릭하면 콕 찌르고, 더블클릭하면 Agent 열기, 길게 누르면 드래그, 던지면 날아가요"
+                )
+            )
     }
 
     @State private var dragging = false

@@ -4,6 +4,7 @@ import AppKit
 struct BeginnerGuidanceCard: View {
     let report: GoldAdvancedStrategyReport
     let learningSummary: GoldPredictionLearningSummary
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
 
     private var tint: Color {
@@ -24,9 +25,9 @@ struct BeginnerGuidanceCard: View {
 
     private var evidenceLines: [String] {
         var lines = [
-            "\(LocalizedString.gold("market_state")): \(report.regime.regime.displayName), ADX \(report.regime.adx.shortNumber), \(LocalizedString.gold("volatility")) \(report.regime.volatilityRegime.displayName)",
+            "\(LocalizedString.gold("market_state")): \(report.regime.regime.displayName(lang: settings.language)), ADX \(report.regime.adx.shortNumber), \(LocalizedString.gold("volatility")) \(report.regime.volatilityRegime.displayName(lang: settings.language))",
             "\(LocalizedString.gold("technical_score")): \(report.technicalOpportunity.signedShortNumber), \(LocalizedString.gold("suggested_position")) \(report.risk.suggestedExposure.percentNumber)",
-            "\(LocalizedString.gold("strategy_version")): \(report.strategyVersion), \(report.calibration.note)"
+            "\(LocalizedString.gold("strategy_version")): \(report.strategyVersion), \(report.calibration.note(lang: settings.language))"
         ]
 
         if let forecast = report.forecast {
@@ -88,7 +89,7 @@ struct BeginnerGuidanceCard: View {
 
             HStack(spacing: 6) {
                 PlainLanguageChip(text: "\(LocalizedString.gold("suggested_position")) \(report.risk.suggestedExposure.percentNumber)", tint: tint)
-                PlainLanguageChip(text: report.regime.regime.displayName, tint: tint)
+                PlainLanguageChip(text: report.regime.regime.displayName(lang: settings.language), tint: tint)
             }
 
             ReferenceNotice()

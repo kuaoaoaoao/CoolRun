@@ -88,8 +88,8 @@ struct BirthdayAddView: View {
             return ["1st", "2nd", "3rd", "4th", "5th", "6th",
                     "7th", "8th", "9th", "10th", "11th", "12th"]
         default:
-            return ["正月", "二月", "三月", "四月", "五月", "六月",
-                    "七月", "八月", "九月", "十月", "冬月", "腊月"]
+            return ["正月", "二月", "三月", "四月", "五月", "六月",  // i18n-allow: 农历月名与日名（文化数据）
+                    "七月", "八月", "九月", "十月", "冬月", "腊月"]  // i18n-allow: 农历月名与日名（文化数据）
         }
     }
 
@@ -104,9 +104,9 @@ struct BirthdayAddView: View {
             ]
         default:
             return [
-                "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
-                "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+                "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",  // i18n-allow: 农历月名与日名（文化数据）
+                "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",  // i18n-allow: 农历月名与日名（文化数据）
+                "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"  // i18n-allow: 农历月名与日名（文化数据）
             ]
         }
     }
@@ -136,7 +136,16 @@ struct BirthdayAddView: View {
                 VStack(spacing: 16) {
                     // 姓名输入
                     formField(title: LocalizedString.calendar("name")) {
-                        AppKitTextField(text: $name, placeholder: settings.language == .english ? "Enter name" : "输入姓名")
+                        AppKitTextField(
+                            text: $name,
+                            placeholder: LocalizedString.l(
+                                settings.language,
+                                en: "Enter name",
+                                zh: "输入姓名",
+                                ja: "名前を入力",
+                                ko: "이름 입력"
+                            )
+                        )
                             .frame(height: 24)
                     }
 
@@ -180,7 +189,13 @@ struct BirthdayAddView: View {
                     }
 
                     // 备注
-                    formField(title: settings.language == .english ? "\(LocalizedString.calendar("note")) (\(LocalizedString.common("optional")))" : "\(LocalizedString.calendar("note"))（\(LocalizedString.common("optional"))）") {
+                    formField(title: LocalizedString.l(
+                        settings.language,
+                        en: "\(LocalizedString.calendar("note")) (\(LocalizedString.common("optional")))",
+                        zh: "\(LocalizedString.calendar("note"))（\(LocalizedString.common("optional"))）",
+                        ja: "\(LocalizedString.calendar("note"))（\(LocalizedString.common("optional"))）",
+                        ko: "\(LocalizedString.calendar("note")) (\(LocalizedString.common("optional")))"
+                    )) {
                         AppKitTextField(text: $note, placeholder: LocalizedString.calendar("note_placeholder"))
                             .frame(height: 24)
                     }
@@ -354,7 +369,7 @@ struct BirthdayAddView: View {
     }
 
     private var previewDateString: String {
-        let monthStr = (isLeapMonth ? "闰" : "") + monthNames[selectedMonth - 1]
+        let monthStr = (isLeapMonth ? "闰" : "") + monthNames[selectedMonth - 1]  // i18n-allow: 农历月名与日名（文化数据）
         return monthStr + dayNames[selectedDay - 1]
     }
 
@@ -755,7 +770,13 @@ struct BirthdayDetailView: View {
     private var formattedDate: String {
         let formatter = DateFormatter()
         let lang = settings.language
-        formatter.dateFormat = lang == .english ? "MMM d, yyyy" : "yyyy年M月d日"
+        formatter.dateFormat = LocalizedString.l(
+            lang,
+            en: "MMM d, yyyy",
+            zh: "yyyy年M月d日",
+            ja: "yyyy年M月d日",
+            ko: "yyyy년 M월 d일"
+        )
         formatter.locale = Locale(identifier: lang.rawValue)
         return formatter.string(from: date)
     }

@@ -15,6 +15,8 @@ struct CountdownListView: View {
     @State private var hoveredEventID: UUID?
     @State private var eventPendingDelete: CountdownEvent?
 
+    private var lang: AppLanguage { settings.language }
+
     init(initialDate: Date? = nil) {
         self.initialDate = initialDate
     }
@@ -169,7 +171,7 @@ struct CountdownListView: View {
                             }
                     }
 
-                    Text(event.dateString)
+                    Text(event.dateString(lang: lang))
                         .font(.system(size: 11))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
 
@@ -291,6 +293,8 @@ struct CountdownAddView: View {
     @State private var note: String = ""
     @ObservedObject private var settings = AppSettings.shared
 
+    private var lang: AppLanguage { settings.language }
+
     init(
         existingEvent: CountdownEvent? = nil,
         initialDate: Date? = nil,
@@ -323,14 +327,14 @@ struct CountdownAddView: View {
     }
 
     private var lunarMonthNames: [String] {
-        ["正月", "二月", "三月", "四月", "五月", "六月",
-         "七月", "八月", "九月", "十月", "冬月", "腊月"]
+        ["正月", "二月", "三月", "四月", "五月", "六月",  // i18n-allow: 农历月名与日名（文化数据）
+         "七月", "八月", "九月", "十月", "冬月", "腊月"]  // i18n-allow: 农历月名与日名（文化数据）
     }
 
     private var lunarDayNames: [String] {
-        ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
-         "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-         "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"]
+        ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",  // i18n-allow: 农历月名与日名（文化数据）
+         "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",  // i18n-allow: 农历月名与日名（文化数据）
+         "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"]  // i18n-allow: 农历月名与日名（文化数据）
     }
 
     var body: some View {
@@ -456,7 +460,9 @@ struct CountdownAddView: View {
 
     private func monthButton(month: Int) -> some View {
         let isSelected = selectedMonth == month
-        let title = isLunar ? lunarMonthNames[month - 1] : "\(month)月"
+        let title = isLunar
+            ? lunarMonthNames[month - 1]
+            : LocalizedString.l(lang, en: "\(month)", zh: "\(month)月", ja: "\(month)月", ko: "\(month)월")
 
         return Button(action: {
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -535,15 +541,15 @@ struct CountdownAddView: View {
     }
 
     private func previewText(event: CountdownEvent, days: Int?) -> String {
-        guard let days else { return event.dateString }
-        let lang = settings.language
+        let dateText = event.dateString(lang: lang)
+        guard let days else { return dateText }
         if days == 0 {
-            return event.dateString + " · " + LocalizedString.countdown("today")
+            return dateText + " · " + LocalizedString.countdown("today", lang: lang)
         }
         if days < 0 {
-            return event.dateString + " · " + LocalizedString.l(lang, en: "\(abs(days)) days ago", zh: "已过 \(abs(days)) 天", ja: "\(abs(days))日前", ko: "\(abs(days))일 전")
+            return dateText + " · " + LocalizedString.l(lang, en: "\(abs(days)) days ago", zh: "已过 \(abs(days)) 天", ja: "\(abs(days))日前", ko: "\(abs(days))일 전")
         }
-        return event.dateString + " · " + LocalizedString.l(lang, en: "\(days) days left", zh: "还有 \(days) 天", ja: "あと\(days)日", ko: "\(days)일 남음")
+        return dateText + " · " + LocalizedString.l(lang, en: "\(days) days left", zh: "还有 \(days) 天", ja: "あと\(days)日", ko: "\(days)일 남음")
     }
 
     // MARK: - 底部按钮

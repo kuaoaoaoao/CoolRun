@@ -28,8 +28,13 @@ struct CodexQuotaWindow: Equatable, Sendable, Identifiable {
     let resetsAt: Date?
     let durationMinutes: Int?
 
-    var durationText: String {
-        guard let durationMinutes, durationMinutes > 0 else { return "额度" }
+    /// 给 AI 工具输出用的默认中文文案（工具 schema 本身保持中文）。
+    var durationText: String { durationText(lang: .chinese) }
+
+    func durationText(lang: AppLanguage) -> String {
+        guard let durationMinutes, durationMinutes > 0 else {
+            return LocalizedString.l(lang, en: "Quota", zh: "额度", ja: "クォータ", ko: "할당량")
+        }
         if durationMinutes % 1440 == 0 { return "\(durationMinutes / 1440)d" }
         if durationMinutes % 60 == 0 { return "\(durationMinutes / 60)h" }
         return "\(durationMinutes)m"
@@ -155,11 +160,18 @@ final class CodexMonitorViewModel {
         refreshTask = nil
     }
 
+    /// 后台轮询入口（App 定时器、AI 工具调用等无视图上下文的地方）：
+    /// 没有视图可传语言，沿用当前界面语言。
     func refresh() async {
+        await refresh(lang: AppSettings.shared.language)
+    }
+
+    /// 视图入口：由视图把当前语言传进来。
+    func refresh(lang: AppLanguage) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         let result = await Task.detached(priority: .utility) {
-            CodexMonitorClient.fetch()
+            CodexMonitorClient.fetch(lang: lang)
         }.value
         isRefreshing = false
         state = result
@@ -181,13 +193,19 @@ final class CodexMonitorViewModel {
 private nonisolated enum CodexMonitorClient {
     private static let cache = CodexMonitorCache()
 
-    static func fetch() -> CodexMonitorState {
+    static func fetch(lang: AppLanguage) -> CodexMonitorState {
         guard let executable = resolveCodexExecutable() else {
-            return .unavailable("未找到 Codex CLI 或 Codex.app")
+            return .unavailable(LocalizedString.l(
+                lang,
+                en: "Codex CLI or Codex.app not found",
+                zh: "未找到 Codex CLI 或 Codex.app",
+                ja: "Codex CLI または Codex.app が見つかりません",
+                ko: "Codex CLI 또는 Codex.app을 찾을 수 없습니다"
+            ))
         }
 
         do {
-            let client = try AppServerClient(executablePath: executable)
+            let client = try AppServerClient(executablePath: executable, lang: lang)
             defer { client.close() }
             let accountResponse: AccountResponse
             do {
@@ -215,18 +233,24 @@ private nonisolated enum CodexMonitorClient {
                     as: AccountResponse.self
                 )
                 guard let refreshedAccount = refreshed.account else {
-                    return .notLoggedIn("account/read 返回空 account")
+                    return .notLoggedIn(LocalizedString.l(
+                        lang,
+                        en: "account/read returned an empty account",
+                        zh: "account/read 返回空 account",
+                        ja: "account/read が空の account を返しました",
+                        ko: "account/read가 빈 account를 반환했습니다"
+                    ))
                 }
                 account = refreshedAccount
             }
             let limitsRead = try? client.request("account/rateLimits/read", as: RateLimitsResponse.self)
             let usageRead = try? client.request("account/usage/read", as: UsageResponse.self)
             let cached = cache.merge(accountKey: account.email ?? account.type, limits: limitsRead, usage: usageRead)
-            let sessions = CodexLocalSessionScanner.scan(environment: runtimeEnvironment())
+            let sessions = CodexLocalSessionScanner.scan(environment: runtimeEnvironment(), lang: lang)
             let snapshot = CodexMonitorSnapshot(
                 account: account.email ?? (account.type == "apiKey" ? "API Key" : account.type),
                 plan: account.planType ?? cached.limits?.rateLimits.planType,
-                limits: makeLimits(from: cached.limits),
+                limits: makeLimits(from: cached.limits, lang: lang),
                 resetCreditsAvailableCount: cached.limits?.rateLimitResetCredits?.availableCount,
                 usage: cached.usage.map {
                     CodexUsageSummary(
@@ -249,7 +273,7 @@ private nonisolated enum CodexMonitorClient {
         }
     }
 
-    private static func makeLimits(from response: RateLimitsResponse?) -> [CodexQuotaLimit] {
+    private static func makeLimits(from response: RateLimitsResponse?, lang: AppLanguage) -> [CodexQuotaLimit] {
         guard let response else { return [] }
         let primaryID = response.rateLimits.limitId ?? "codex"
         let entries: [(String, RateLimitsResponse.RateLimit)]
@@ -263,7 +287,10 @@ private nonisolated enum CodexMonitorClient {
         }
 
         return entries.compactMap { id, limit in
-            let windows = [("primary", "主额度", limit.primary), ("secondary", "次额度", limit.secondary)].compactMap { kind, title, window -> CodexQuotaWindow? in
+            let windows = [
+                ("primary", LocalizedString.l(lang, en: "Primary", zh: "主额度", ja: "メイン", ko: "기본"), limit.primary),
+                ("secondary", LocalizedString.l(lang, en: "Secondary", zh: "次额度", ja: "サブ", ko: "보조"), limit.secondary),
+            ].compactMap { kind, title, window -> CodexQuotaWindow? in
                 guard let window else { return nil }
                 return CodexQuotaWindow(
                     id: "\(id)-\(kind)",
@@ -351,7 +378,8 @@ nonisolated enum CodexLocalSessionScanner {
     static func scan(
         environment: [String: String],
         now: Date = Date(),
-        limit: Int = 5
+        limit: Int = 5,
+        lang: AppLanguage = .chinese
     ) -> [CodexSessionSummary] {
         let fileManager = FileManager.default
         let root = sessionsRootURL(environment: environment)
@@ -391,7 +419,8 @@ nonisolated enum CodexLocalSessionScanner {
                 at: url,
                 modifiedAt: modifiedAt,
                 now: now,
-                titleIndex: titleIndex
+                titleIndex: titleIndex,
+                lang: lang
             )
         }
         .prefix(limit)
@@ -403,7 +432,8 @@ nonisolated enum CodexLocalSessionScanner {
         transcriptPath: String,
         modifiedAt: Date,
         now: Date,
-        titleIndex: [String: String] = [:]
+        titleIndex: [String: String] = [:],
+        lang: AppLanguage = .chinese
     ) -> CodexSessionSummary? {
         let firstLine = data.prefix { $0 != 0x0A }
         guard
@@ -422,9 +452,9 @@ nonisolated enum CodexLocalSessionScanner {
         let projectName = cwd
             .map { URL(fileURLWithPath: $0, isDirectory: true).lastPathComponent }
             .flatMap { $0.isEmpty ? nil : $0 }
-            ?? "本机任务"
+            ?? LocalizedString.l(lang, en: "Local task", zh: "本机任务", ja: "ローカルタスク", ko: "로컬 작업")
         let title = titleIndex[id]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let source = sourceLabel(payload: payload)
+        let source = sourceLabel(payload: payload, lang: lang)
 
         return CodexSessionSummary(
             id: id,
@@ -441,7 +471,8 @@ nonisolated enum CodexLocalSessionScanner {
         at url: URL,
         modifiedAt: Date,
         now: Date,
-        titleIndex: [String: String]
+        titleIndex: [String: String],
+        lang: AppLanguage
     ) -> CodexSessionSummary? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -451,7 +482,8 @@ nonisolated enum CodexLocalSessionScanner {
             transcriptPath: url.path,
             modifiedAt: modifiedAt,
             now: now,
-            titleIndex: titleIndex
+            titleIndex: titleIndex,
+            lang: lang
         )
     }
 
@@ -485,7 +517,7 @@ nonisolated enum CodexLocalSessionScanner {
         return result
     }
 
-    private static func sourceLabel(payload: [String: Any]) -> String {
+    private static func sourceLabel(payload: [String: Any], lang: AppLanguage) -> String {
         let rawValues = [
             payload["originator"] as? String,
             payload["source"] as? String,
@@ -493,7 +525,9 @@ nonisolated enum CodexLocalSessionScanner {
         ]
         let raw = rawValues.compactMap { $0 }.joined(separator: " ").lowercased()
         if raw.contains("vscode") || raw.contains("ide") { return "IDE" }
-        if raw.contains("desktop") || raw.contains("codex_app") { return "桌面端" }
+        if raw.contains("desktop") || raw.contains("codex_app") {
+            return LocalizedString.l(lang, en: "Desktop", zh: "桌面端", ja: "デスクトップ", ko: "데스크톱")
+        }
         if raw.contains("cli") || raw.contains("exec") { return "CLI" }
         return "Codex"
     }
@@ -568,15 +602,17 @@ private nonisolated final class AppServerClient {
     private let process: Process
     private let input: FileHandle
     private let reader: AppServerOutputReader
+    private let lang: AppLanguage
     private var nextID = 1
     private var buffer = Data()
 
-    init(executablePath: String) throws {
+    init(executablePath: String, lang: AppLanguage) throws {
         let inputPipe = Pipe()
         let outputPipe = Pipe()
         process = Process()
         input = inputPipe.fileHandleForWriting
         reader = AppServerOutputReader(fileHandle: outputPipe.fileHandleForReading)
+        self.lang = lang
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = ["app-server", "--listen", "stdio://"]
         process.environment = CodexMonitorClient.runtimeEnvironment()
@@ -599,9 +635,14 @@ private nonisolated final class AppServerClient {
             guard (try? decoder.decode(IDEnvelope.self, from: data))?.id == id else { continue }
             let envelope = try decoder.decode(ResponseEnvelope<Response>.self, from: data)
             if let result = envelope.result { return result }
-            throw NSError(domain: "Codex", code: 1, userInfo: [NSLocalizedDescriptionKey: envelope.error?.message ?? "Codex 请求失败"])
+            throw NSError(domain: "Codex", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: envelope.error?.message
+                    ?? LocalizedString.l(lang, en: "Codex request failed", zh: "Codex 请求失败", ja: "Codex リクエストに失敗しました", ko: "Codex 요청 실패")
+            ])
         }
-        throw NSError(domain: "Codex", code: 2, userInfo: [NSLocalizedDescriptionKey: "Codex 响应超时"])
+        throw NSError(domain: "Codex", code: 2, userInfo: [
+            NSLocalizedDescriptionKey: LocalizedString.l(lang, en: "Codex response timed out", zh: "Codex 响应超时", ja: "Codex の応答がタイムアウトしました", ko: "Codex 응답 시간 초과")
+        ])
     }
 
     func close() {

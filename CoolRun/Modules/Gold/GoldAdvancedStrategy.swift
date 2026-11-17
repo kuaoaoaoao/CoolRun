@@ -8,7 +8,7 @@ struct GoldStrategyCalibration: Equatable, Sendable {
     nonisolated static let neutral = GoldStrategyCalibration(
         confidenceMultiplier: 1,
         exposureMultiplier: 1,
-        note: "样本积累中，暂不自动调参"
+        note: ""
     )
 
     let confidenceMultiplier: Double
@@ -17,6 +17,18 @@ struct GoldStrategyCalibration: Equatable, Sendable {
 
     var isNeutral: Bool {
         abs(confidenceMultiplier - 1) < 0.001 && abs(exposureMultiplier - 1) < 0.001
+    }
+
+    /// 中性校准没有具体说明时给一句默认解释，展示层按当前语言取。
+    nonisolated func note(lang: AppLanguage) -> String {
+        guard note.isEmpty else { return note }
+        return LocalizedString.l(
+            lang,
+            en: "Collecting samples; auto-tuning stays off for now",
+            zh: "样本积累中，暂不自动调参",
+            ja: "サンプル蓄積中。当面は自動調整しません",
+            ko: "샘플을 쌓는 중이라 당분간 자동 조정하지 않습니다"
+        )
     }
 }
 
@@ -27,35 +39,29 @@ enum MarketRegime: String, CaseIterable, Sendable {
     case weakDowntrend = "温和下跌"
     case strongDowntrend = "强势下跌"
 
-    var displayName: String {
+    nonisolated func displayName(lang: AppLanguage) -> String {
         switch self {
-        case .strongUptrend: return LocalizedString.gold("strong_uptrend")
-        case .weakUptrend: return LocalizedString.gold("weak_uptrend")
-        case .ranging: return LocalizedString.gold("ranging")
-        case .weakDowntrend: return LocalizedString.gold("weak_downtrend")
-        case .strongDowntrend: return LocalizedString.gold("strong_downtrend")
+        case .strongUptrend:
+            LocalizedString.l(lang, en: "Strong uptrend", zh: "强势上涨", ja: "強い上昇", ko: "강한 상승")
+        case .weakUptrend:
+            LocalizedString.l(lang, en: "Mild uptrend", zh: "温和上涨", ja: "緩やかな上昇", ko: "완만한 상승")
+        case .ranging:
+            LocalizedString.l(lang, en: "Ranging", zh: "震荡整理", ja: "レンジ推移", ko: "횡보 정리")
+        case .weakDowntrend:
+            LocalizedString.l(lang, en: "Mild downtrend", zh: "温和下跌", ja: "緩やかな下落", ko: "완만한 하락")
+        case .strongDowntrend:
+            LocalizedString.l(lang, en: "Strong downtrend", zh: "强势下跌", ja: "強い下落", ko: "강한 하락")
         }
     }
 
-    var strategyLabel: String {
+    nonisolated func strategyLabel(lang: AppLanguage) -> String {
         switch self {
         case .strongUptrend, .weakUptrend:
-            LocalizedString.gold("trend_follow")
+            LocalizedString.l(lang, en: "Trend following", zh: "趋势跟随", ja: "トレンドフォロー", ko: "추세 추종")
         case .ranging:
-            LocalizedString.gold("mean_reversion")
+            LocalizedString.l(lang, en: "Mean reversion / grid watch", zh: "均值回归/网格观察", ja: "平均回帰／グリッド観察", ko: "평균 회귀·그리드 관찰")
         case .weakDowntrend, .strongDowntrend:
-            LocalizedString.gold("defensive")
-        }
-    }
-
-    nonisolated var fallbackStrategyLabel: String {
-        switch self {
-        case .strongUptrend, .weakUptrend:
-            "趋势跟随"
-        case .ranging:
-            "均值回归/网格观察"
-        case .weakDowntrend, .strongDowntrend:
-            "防守观察"
+            LocalizedString.l(lang, en: "Defensive watch", zh: "防守观察", ja: "防御的観察", ko: "방어적 관찰")
         }
     }
 }
@@ -66,12 +72,16 @@ enum VolatilityRegime: String, Sendable {
     case high = "高波动"
     case extreme = "极端波动"
 
-    var displayName: String {
+    nonisolated func displayName(lang: AppLanguage) -> String {
         switch self {
-        case .low: return LocalizedString.gold("vol_low")
-        case .normal: return LocalizedString.gold("vol_normal")
-        case .high: return LocalizedString.gold("vol_high")
-        case .extreme: return LocalizedString.gold("vol_extreme")
+        case .low:
+            LocalizedString.l(lang, en: "Low volatility", zh: "低波动", ja: "低ボラティリティ", ko: "낮은 변동성")
+        case .normal:
+            LocalizedString.l(lang, en: "Normal volatility", zh: "正常波动", ja: "通常のボラティリティ", ko: "보통 변동성")
+        case .high:
+            LocalizedString.l(lang, en: "High volatility", zh: "高波动", ja: "高ボラティリティ", ko: "높은 변동성")
+        case .extreme:
+            LocalizedString.l(lang, en: "Extreme volatility", zh: "极端波动", ja: "極端なボラティリティ", ko: "극단적 변동성")
         }
     }
 }
@@ -152,13 +162,14 @@ enum GoldAdvancedStrategy {
         snapshot: TechnicalSnapshot,
         signal: TradingSignal?,
         marketContext: GoldMarketContext? = nil,
-        calibration: GoldStrategyCalibration = .neutral
+        calibration: GoldStrategyCalibration = .neutral,
+        lang: AppLanguage
     ) -> GoldAdvancedStrategyReport? {
         let prices = records.map(\.price)
         guard prices.count >= 20, prices.last != nil else { return nil }
 
         let regime = detectRegime(prices: prices)
-        let meanReversion = analyzeMeanReversion(prices: prices)
+        let meanReversion = analyzeMeanReversion(prices: prices, lang: lang)
         let forecast = simulateMonteCarlo(prices: prices, forecastSteps: 7, simulations: 700)
         let technicalOpportunity = scoreTechnicalOpportunity(prices: prices, snapshot: snapshot)
         let grid = buildGridPlan(prices: prices, snapshot: snapshot, regime: regime)
@@ -169,7 +180,8 @@ enum GoldAdvancedStrategy {
             forecast: forecast,
             technicalOpportunity: technicalOpportunity,
             marketContext: marketContext,
-            calibration: calibration
+            calibration: calibration,
+            lang: lang
         )
         let composite = buildCompositeDecision(
             regime: regime,
@@ -178,7 +190,8 @@ enum GoldAdvancedStrategy {
             signal: signal,
             technicalOpportunity: technicalOpportunity,
             marketContext: marketContext,
-            calibration: calibration
+            calibration: calibration,
+            lang: lang
         )
         let beginner = buildBeginnerGuidance(
             regime: regime,
@@ -186,7 +199,8 @@ enum GoldAdvancedStrategy {
             forecast: forecast,
             composite: composite,
             technicalOpportunity: technicalOpportunity,
-            marketContext: marketContext
+            marketContext: marketContext,
+            lang: lang
         )
 
         return GoldAdvancedStrategyReport(
@@ -242,7 +256,7 @@ enum GoldAdvancedStrategy {
         )
     }
 
-    private nonisolated static func analyzeMeanReversion(prices: [Double]) -> MeanReversionReport? {
+    private nonisolated static func analyzeMeanReversion(prices: [Double], lang: AppLanguage) -> MeanReversionReport? {
         let lookback = min(20, prices.count)
         guard lookback >= 10, let currentPrice = prices.last else { return nil }
 
@@ -260,19 +274,43 @@ enum GoldAdvancedStrategy {
         if zScore <= -1.8 {
             direction = .buy
             confidence = min(abs(zScore) / 3, 1)
-            summary = "价格低于动态均值，存在回归观察点"
+            summary = LocalizedString.l(
+                lang,
+                en: "Price is below the dynamic mean; a reversion setup is worth watching",
+                zh: "价格低于动态均值，存在回归观察点",
+                ja: "価格が動的平均を下回り、回帰の観察ポイントがあります",
+                ko: "가격이 동적 평균 아래로, 회귀 관찰 지점이 있습니다"
+            )
         } else if zScore >= 1.8 {
             direction = .sell
             confidence = min(abs(zScore) / 3, 1)
-            summary = "价格高于动态均值，需留意回落"
+            summary = LocalizedString.l(
+                lang,
+                en: "Price is above the dynamic mean; watch for a pullback",
+                zh: "价格高于动态均值，需留意回落",
+                ja: "価格が動的平均を上回り、反落に注意です",
+                ko: "가격이 동적 평균 위로, 조정에 유의해야 합니다"
+            )
         } else if abs(zScore) <= 0.5 {
             direction = .hold
             confidence = 0.65
-            summary = "价格贴近均值，回归空间有限"
+            summary = LocalizedString.l(
+                lang,
+                en: "Price hugs the mean; limited reversion room",
+                zh: "价格贴近均值，回归空间有限",
+                ja: "価格は平均付近で、回帰余地は限定的です",
+                ko: "가격이 평균에 붙어 있어 회귀 여지가 제한적입니다"
+            )
         } else {
             direction = .hold
             confidence = 0.35
-            summary = "价格偏离不明显，均值回归信号较弱"
+            summary = LocalizedString.l(
+                lang,
+                en: "Deviation is not obvious; the mean-reversion signal is weak",
+                zh: "价格偏离不明显，均值回归信号较弱",
+                ja: "乖離は目立たず、平均回帰シグナルは弱めです",
+                ko: "이탈이 뚜렷하지 않아 평균 회귀 신호가 약합니다"
+            )
         }
 
         return MeanReversionReport(
@@ -370,7 +408,8 @@ enum GoldAdvancedStrategy {
         forecast: MonteCarloForecast?,
         technicalOpportunity: Double,
         marketContext: GoldMarketContext?,
-        calibration: GoldStrategyCalibration
+        calibration: GoldStrategyCalibration,
+        lang: AppLanguage
     ) -> RiskSummary {
         let volatilityPenalty: Double
         switch regime.volatilityRegime {
@@ -430,17 +469,33 @@ enum GoldAdvancedStrategy {
 
         let riskLevel: String
         switch suggestedExposure {
-        case ..<0.08: riskLevel = "保守"
-        case ..<0.18: riskLevel = "适中"
-        case ..<0.28: riskLevel = "偏进取"
-        default: riskLevel = "高风险"
+        case ..<0.08:
+            riskLevel = LocalizedString.l(lang, en: "Conservative", zh: "保守", ja: "保守的", ko: "보수적")
+        case ..<0.18:
+            riskLevel = LocalizedString.l(lang, en: "Moderate", zh: "适中", ja: "中庸", ko: "적정")
+        case ..<0.28:
+            riskLevel = LocalizedString.l(lang, en: "Leaning aggressive", zh: "偏进取", ja: "やや積極的", ko: "다소 공격적")
+        default:
+            riskLevel = LocalizedString.l(lang, en: "High risk", zh: "高风险", ja: "高リスク", ko: "고위험")
         }
 
         let warning: String?
         if regime.volatilityRegime == .extreme {
-            warning = "波动进入极端区间，降低仓位优先"
+            warning = LocalizedString.l(
+                lang,
+                en: "Volatility is in an extreme range; cutting exposure comes first",
+                zh: "波动进入极端区间，降低仓位优先",
+                ja: "ボラティリティが極端な水準です。まず建玉を減らしましょう",
+                ko: "변동성이 극단 구간이라 비중 축소가 우선입니다"
+            )
         } else if regime.regime == .strongDowntrend {
-            warning = "强下行状态，避免追涨"
+            warning = LocalizedString.l(
+                lang,
+                en: "Strong downtrend; avoid chasing rallies",
+                zh: "强下行状态，避免追涨",
+                ja: "強い下落局面です。追い上がり買いは避けましょう",
+                ko: "강한 하락 국면이라 추격 매수를 피하세요"
+            )
         } else {
             warning = nil
         }
@@ -460,7 +515,8 @@ enum GoldAdvancedStrategy {
         signal: TradingSignal?,
         technicalOpportunity: Double,
         marketContext: GoldMarketContext?,
-        calibration: GoldStrategyCalibration
+        calibration: GoldStrategyCalibration,
+        lang: AppLanguage
     ) -> (direction: SignalDirection, confidence: Double, summary: String) {
         var buyScore = 0.0
         var sellScore = 0.0
@@ -534,7 +590,13 @@ enum GoldAdvancedStrategy {
         }
 
         let confidence = min(abs(netScore), 1)
-        let summary = "\(regime.regime.rawValue)，优先采用\(regime.regime.fallbackStrategyLabel)"
+        let summary = LocalizedString.l(
+            lang,
+            en: "\(regime.regime.displayName(lang: lang)); prefer \(regime.regime.strategyLabel(lang: lang))",
+            zh: "\(regime.regime.displayName(lang: lang))，优先采用\(regime.regime.strategyLabel(lang: lang))",
+            ja: "\(regime.regime.displayName(lang: lang))、優先するのは\(regime.regime.strategyLabel(lang: lang))",
+            ko: "\(regime.regime.displayName(lang: lang)), \(regime.regime.strategyLabel(lang: lang)) 우선"
+        )
         return (direction, confidence, summary)
     }
 
@@ -544,12 +606,19 @@ enum GoldAdvancedStrategy {
         forecast: MonteCarloForecast?,
         composite: (direction: SignalDirection, confidence: Double, summary: String),
         technicalOpportunity: Double,
-        marketContext: GoldMarketContext?
+        marketContext: GoldMarketContext?,
+        lang: AppLanguage
     ) -> (action: String, reason: String, tone: BeginnerTone) {
         if regime.volatilityRegime == .extreme || regime.regime == .strongDowntrend {
             return (
-                "不建议追买",
-                "当前波动或下跌压力偏大，新手更适合先观察，等价格和趋势稳定。",
+                LocalizedString.l(lang, en: "Not a buy here", zh: "不建议追买", ja: "今は買い増し不向き", ko: "지금은 추격 매수 비추천"),
+                LocalizedString.l(
+                    lang,
+                    en: "Volatility or downside pressure is too high; for beginners, watching first until price and trend settle is safer.",
+                    zh: "当前波动或下跌压力偏大，新手更适合先观察，等价格和趋势稳定。",
+                    ja: "ボラティリティか下落圧力が大きめです。初心者はまず観察し、価格とトレンドが落ち着くのを待つのが安全です。",
+                    ko: "변동성이나 하락 압력이 큽니다. 초보자는 먼저 지켜보며 가격과 추세가 안정되기를 기다리는 편이 안전합니다."
+                ),
                 .defensive
             )
         }
@@ -557,11 +626,25 @@ enum GoldAdvancedStrategy {
         if case .buy = composite.direction,
            composite.confidence >= 0.30,
            risk.suggestedExposure >= 0.06 {
-            let probabilityText = forecast.map { "，模拟上涨概率约 \(Int($0.probabilityAboveCurrent * 100))%" } ?? ""
-            let contextText = marketContextText(marketContext)
+            let probabilityText = forecast.map {
+                LocalizedString.l(
+                    lang,
+                    en: ", simulated upside probability about \(Int($0.probabilityAboveCurrent * 100))%",
+                    zh: "，模拟上涨概率约 \(Int($0.probabilityAboveCurrent * 100))%",
+                    ja: "、上昇確率は約 \(Int($0.probabilityAboveCurrent * 100))%",
+                    ko: ", 상승 확률 약 \(Int($0.probabilityAboveCurrent * 100))%"
+                )
+            } ?? ""
+            let contextText = marketContextText(marketContext, lang: lang)
             return (
-                "可小额分批观察",
-                "多项信号偏正面\(probabilityText)\(contextText)。不适合一次买太多，先用小仓位试探更稳。",
+                LocalizedString.l(lang, en: "Small batches worth watching", zh: "可小额分批观察", ja: "少額の分割なら観察可", ko: "소액 분할 관찰 가능"),
+                LocalizedString.l(
+                    lang,
+                    en: "Several signals lean positive\(probabilityText)\(contextText). Buying too much at once is not ideal; a small position first is steadier.",
+                    zh: "多项信号偏正面\(probabilityText)\(contextText)。不适合一次买太多，先用小仓位试探更稳。",
+                    ja: "複数のシグナルが前向きです\(probabilityText)\(contextText)。一度に多く買わず、まず小さな建玉で試すのが安定します。",
+                    ko: "여러 신호가 긍정적입니다\(probabilityText)\(contextText). 한 번에 많이 사기보다 소액으로 먼저 시작하는 편이 안정적입니다."
+                ),
                 .positive
             )
         }
@@ -570,10 +653,16 @@ enum GoldAdvancedStrategy {
            regime.regime != .strongDowntrend,
            regime.volatilityRegime != .extreme,
            (marketContext?.overallScore ?? 0) > -35 {
-            let contextText = marketContextText(marketContext)
+            let contextText = marketContextText(marketContext, lang: lang)
             return (
-                "可按定投小额买入",
-                "技术评分偏正面\(contextText)，但趋势确认还不够强。更适合用固定预算的一小部分分批买，而不是一次性重仓。",
+                LocalizedString.l(lang, en: "Small fixed-amount buys are fine", zh: "可按定投小额买入", ja: "定額の少額買いなら可", ko: "정액 소액 매수 가능"),
+                LocalizedString.l(
+                    lang,
+                    en: "The technical score is positive\(contextText), but trend confirmation is not strong enough. Split a small slice of a fixed budget instead of taking a heavy position at once.",
+                    zh: "技术评分偏正面\(contextText)，但趋势确认还不够强。更适合用固定预算的一小部分分批买，而不是一次性重仓。",
+                    ja: "テクニカル評価は前向きです\(contextText)が、トレンド確認はまだ十分ではありません。一度に大きく張らず、固定予算の一部を分割で買うのが向いています。",
+                    ko: "기술 점수는 긍정적입니다\(contextText). 다만 추세 확인이 충분히 강하지 않습니다. 한 번에 큰 비중을 두기보다 고정 예산의 일부를 나눠 사는 편이 좋습니다."
+                ),
                 .positive
             )
         }
@@ -581,28 +670,58 @@ enum GoldAdvancedStrategy {
         if case .sell = composite.direction,
            composite.confidence >= 0.25 {
             return (
-                "暂不建议买入",
-                "偏空信号更多，短线可能还有回落压力。新手可以等回稳后再看。",
+                LocalizedString.l(lang, en: "Buying is not advised for now", zh: "暂不建议买入", ja: "今は買いを見送り", ko: "당분간 매수 비추천"),
+                LocalizedString.l(
+                    lang,
+                    en: "Bearish signals dominate and short-term downside pressure may persist. Beginners can wait for it to stabilize.",
+                    zh: "偏空信号更多，短线可能还有回落压力。新手可以等回稳后再看。",
+                    ja: "弱気シグナルが多く、短期はなお下押し圧力が残る可能性があります。初心者は落ち着いてから見るのがよいでしょう。",
+                    ko: "하락 신호가 더 많고 단기적으로 추가 하락 압력이 남아 있을 수 있습니다. 초보자는 안정된 뒤에 보는 편이 좋습니다."
+                ),
                 .defensive
             )
         }
 
         return (
-            "观望为主",
-            "当前信号不够统一，价格可能上也可能下。没有把握时，先等下一轮数据更友好。",
+            LocalizedString.l(lang, en: "Mostly wait and see", zh: "观望为主", ja: "様子見が中心", ko: "관망 위주"),
+            LocalizedString.l(
+                lang,
+                en: "Signals are not aligned yet, so price could go either way. Without conviction, wait for the next round of data.",
+                zh: "当前信号不够统一，价格可能上也可能下。没有把握时，先等下一轮数据更友好。",
+                ja: "シグナルが揃っておらず、価格は上下どちらにも動き得ます。確信が持てないときは次のデータを待ちましょう。",
+                ko: "신호가 아직 일치하지 않아 가격이 어느 쪽으로도 움직일 수 있습니다. 확신이 없을 때는 다음 데이터를 기다리세요."
+            ),
             .cautious
         )
     }
 
-    private nonisolated static func marketContextText(_ context: GoldMarketContext?) -> String {
+    private nonisolated static func marketContextText(_ context: GoldMarketContext?, lang: AppLanguage) -> String {
         guard let context else { return "" }
         if context.overallScore >= 18 {
-            return "，宏观新闻也偏正面"
+            return LocalizedString.l(
+                lang,
+                en: ", and macro news leans positive too",
+                zh: "，宏观新闻也偏正面",
+                ja: "、マクロニュースも前向きです",
+                ko: ", 거시 뉴스도 긍정적입니다"
+            )
         }
         if context.overallScore <= -18 {
-            return "，但宏观新闻偏谨慎"
+            return LocalizedString.l(
+                lang,
+                en: ", but macro news is cautious",
+                zh: "，但宏观新闻偏谨慎",
+                ja: "、ただしマクロニュースは慎重寄りです",
+                ko: ", 다만 거시 뉴스는 신중한 편입니다"
+            )
         }
-        return "，宏观新闻暂偏中性"
+        return LocalizedString.l(
+            lang,
+            en: ", while macro news stays neutral",
+            zh: "，宏观新闻暂偏中性",
+            ja: "、マクロニュースは中立寄りです",
+            ko: ", 거시 뉴스는 중립적입니다"
+        )
     }
 
     private nonisolated static func scoreTechnicalOpportunity(

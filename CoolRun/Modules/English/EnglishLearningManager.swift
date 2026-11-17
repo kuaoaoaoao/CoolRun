@@ -113,11 +113,15 @@ final class EnglishLearningManager: NSObject, ObservableObject {
 
     /// 用于 UI 展示的语音质量标签。
     static func qualityLabel(for voice: AVSpeechSynthesisVoice?) -> String {
-        guard let voice else { return "未选择" }
+        let lang = AppSettings.shared.language
+        guard let voice else {
+            return LocalizedString.l(lang, en: "Not selected", zh: "未选择", ja: "未選択", ko: "선택 안 됨")
+        }
         switch voice.quality {
         case .premium: return "Premium"
         case .enhanced: return "Enhanced"
-        default: return "压缩版"
+        default:
+            return LocalizedString.l(lang, en: "Compact", zh: "压缩版", ja: "圧縮版", ko: "압축 버전")
         }
     }
 

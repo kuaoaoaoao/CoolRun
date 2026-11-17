@@ -65,7 +65,7 @@ struct GoldDecisionSummaryCard: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 5) {
-                    decisionChip(report.regime.regime.displayName, icon: "waveform.path")
+                    decisionChip(report.regime.regime.displayName(lang: settings.language), icon: "waveform.path")
                     decisionChip(report.risk.riskLevel, icon: "shield")
                     decisionChip(report.risk.suggestedExposure.percentNumber, icon: "chart.pie")
                 }
@@ -141,7 +141,7 @@ struct SignalCardView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(tint)
                 Spacer()
-                Text(signal.strength.rawValue)
+                Text(signal.strength.displayName)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(tint)
                     .padding(.horizontal, 7)

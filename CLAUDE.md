@@ -155,6 +155,10 @@ The project currently builds with **zero warnings**; keep it that way.
 ## Conventions
 
 - UI strings use 4-language localization via `LocalizedString` helper.
+  Full rules (how to get `lang` in a view, what must *not* be localized,
+  the `// i18n-allow` marker, glossary) are in `docs/i18n-conventions.md`.
+  Run `./scripts/verify_i18n.sh` after touching user-facing copy — it fails on
+  any Chinese literal that is not inside an `en:`/`zh:` call.
 - `@Observable` macro for new view models; `ObservableObject` for legacy stores.
 - `Sendable` conformance for value types crossing actor boundaries.
 - `@MainActor` for view models updating UI state.

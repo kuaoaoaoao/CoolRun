@@ -19,11 +19,32 @@ final class AgentRuntimeLocator {
         case downloaded
         case systemPath
 
-        nonisolated var displayName: String {
+        nonisolated func displayName(_ lang: AppLanguage) -> String {
             switch self {
-            case .bundled: return "内置"
-            case .downloaded: return "已下载"
-            case .systemPath: return "系统安装"
+            case .bundled:
+                return LocalizedString.l(
+                    lang,
+                    en: "Bundled",
+                    zh: "内置",
+                    ja: "内蔵",
+                    ko: "내장"
+                )
+            case .downloaded:
+                return LocalizedString.l(
+                    lang,
+                    en: "Downloaded",
+                    zh: "已下载",
+                    ja: "ダウンロード済み",
+                    ko: "다운로드됨"
+                )
+            case .systemPath:
+                return LocalizedString.l(
+                    lang,
+                    en: "System",
+                    zh: "系统安装",
+                    ja: "システム",
+                    ko: "시스템"
+                )
             }
         }
     }

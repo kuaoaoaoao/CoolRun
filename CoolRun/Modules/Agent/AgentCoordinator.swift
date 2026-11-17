@@ -37,6 +37,9 @@ final class AgentCoordinator {
 
     private static let logger = Logger(subsystem: "com.coolrun.agent", category: "coordinator")
 
+    /// 界面文案用的语言。界面本身订阅了 AppSettings，这里只是取当前值。
+    private var lang: AppLanguage { AppSettings.shared.language }
+
     private(set) var isRunning = false
     private(set) var streamingText = ""
     private(set) var reasoningText = ""
@@ -73,7 +76,7 @@ final class AgentCoordinator {
         do {
             config = try AgentSettings.shared.makeConfig()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = localized(error)
             return
         }
 
@@ -97,7 +100,7 @@ final class AgentCoordinator {
         do {
             config = try AgentSettings.shared.makeConfig()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = localized(error)
             return
         }
 
@@ -111,7 +114,13 @@ final class AgentCoordinator {
 
     /// 这条错误是配置问题吗？UI 用它决定给「去设置」还是「重试」。
     nonisolated static func looksLikeConfigurationProblem(_ message: String) -> Bool {
-        let markers = ["API Key", "接口地址", "模型名称", "未配置", "设置", "credential", "401", "403"]
+        let markers = [
+            "API Key", "接口地址", "模型名称", "未配置", "设置",  // i18n-allow: 多语言关键词匹配表 / 日志
+            "credential", "401", "403",
+            "endpoint", "model name", "not configured", "Settings",
+            "エンドポイント", "モデル名", "未設定", "設定",  // i18n-allow: 多语言关键词匹配表 / 日志
+            "엔드포인트", "모델 이름", "설정되지 않음", "설정",
+        ]
         return markers.contains { message.localizedCaseInsensitiveContains($0) }
     }
 
@@ -190,8 +199,14 @@ final class AgentCoordinator {
                     token: CoolRunMCPHost.shared.token
                 )
             } catch {
-                Self.logger.error("DSH patch 写入失败：\(error.localizedDescription, privacy: .public)")
-                self.errorMessage = "DSH 运行时配置写入失败：\(error.localizedDescription)"
+                Self.logger.error("DSH patch 写入失败：\(error.localizedDescription, privacy: .public)")  // i18n-allow: 多语言关键词匹配表 / 日志
+                self.errorMessage = LocalizedString.l(
+                    self.lang,
+                    en: "Failed to write the DSH runtime config: \(error.localizedDescription)",
+                    zh: "DSH 运行时配置写入失败：\(error.localizedDescription)",
+                    ja: "DSH ランタイム設定の書き込みに失敗しました：\(error.localizedDescription)",
+                    ko: "DSH 런타임 설정 쓰기 실패: \(error.localizedDescription)"
+                )
             }
         }
     }
@@ -212,7 +227,25 @@ final class AgentCoordinator {
             appendNotice(helpText)
             return true
         case .unknown(let word):
-            appendNotice("没有 /\(word) 这个命令。\(helpText)")
+            // 场景命令缺参数时也走这里：说清是「少了一句内容」，别当成不存在的命令。
+            let isRecipe = AgentRecipeStore.shared.all.contains { $0.slash == word }
+            appendNotice(
+                isRecipe
+                    ? LocalizedString.l(
+                        lang,
+                        en: "/\(word) needs some content after it.",
+                        zh: "/\(word) 还需要补一句内容。",
+                        ja: "/\(word) の後ろに内容を書いてください。",
+                        ko: "/\(word) 뒤에 내용을 적어 주세요."
+                    )
+                    : LocalizedString.l(
+                        lang,
+                        en: "No such command: /\(word). \(helpText)",
+                        zh: "没有 /\(word) 这个命令。\(helpText)",
+                        ja: "/\(word) というコマンドはありません。\(helpText)",
+                        ko: "/\(word) 명령이 없습니다. \(helpText)"
+                    )
+            )
             return true
         case .openSettings:
             return false
@@ -226,19 +259,37 @@ final class AgentCoordinator {
     func runToolDirectly(name: String, arguments: JSONValue) {
         guard !isRunning else { return }
         guard !name.isEmpty else {
-            errorMessage = "用法：/tool <工具名> [JSON 参数]"
+            errorMessage = LocalizedString.l(
+                lang,
+                en: "Usage: /tool <tool name> [JSON arguments]",
+                zh: "用法：/tool <工具名> [JSON 参数]",
+                ja: "使い方：/tool <ツール名> [JSON 引数]",
+                ko: "사용법: /tool <도구 이름> [JSON 인수]"
+            )
             return
         }
         AgentTools.registerAll()
         AgentActionTools.registerAll()
 
         guard let descriptor = ToolRegistry.shared.descriptor(named: name) else {
-            errorMessage = "没有叫 \(name) 的工具。"
+            errorMessage = LocalizedString.l(
+                lang,
+                en: "No tool named \(name).",
+                zh: "没有叫 \(name) 的工具。",
+                ja: "\(name) というツールはありません。",
+                ko: "\(name) 도구가 없습니다."
+            )
             return
         }
         let allowed = AgentSettings.shared.toolLevel
         guard descriptor.permission <= allowed else {
-            errorMessage = "\(name) 需要 \(descriptor.permission.displayName) 等级，当前设置只允许 \(allowed.displayName)。"
+            errorMessage = LocalizedString.l(
+                lang,
+                en: "\(name) requires \(descriptor.permission.displayName) level, but the current setting only allows \(allowed.displayName).",
+                zh: "\(name) 需要 \(descriptor.permission.displayName) 等级，当前设置只允许 \(allowed.displayName)。",
+                ja: "\(name) には \(descriptor.permission.displayName) レベルが必要ですが、現在の設定では \(allowed.displayName) までしか許可されていません。",
+                ko: "\(name)은(는) \(descriptor.permission.displayName) 레벨이 필요하지만 현재 설정은 \(allowed.displayName)까지만 허용합니다."
+            )
             return
         }
 
@@ -261,7 +312,15 @@ final class AgentCoordinator {
                 case .denied(let reason):
                     self.isRunning = false
                     self.runTask = nil
-                    self.appendNotice("已取消：\(name)（\(reason)）")
+                    self.appendNotice(
+                        LocalizedString.l(
+                            self.lang,
+                            en: "Cancelled: \(name) (\(reason))",
+                            zh: "已取消：\(name)（\(reason)）",
+                            ja: "キャンセルしました：\(name)（\(reason)）",
+                            ko: "취소됨: \(name) (\(reason))"
+                        )
+                    )
                     return
                 }
             }
@@ -292,11 +351,26 @@ final class AgentCoordinator {
             }
 
             let preview = result.content.count > 2400
-                ? String(result.content.prefix(2400)) + "\n…（已截断）"
+                ? String(result.content.prefix(2400))
+                    + LocalizedString.l(
+                        lang,
+                        en: "\n… (truncated)",
+                        zh: "\n…（已截断）",
+                        ja: "\n…（切り詰めました）",
+                        ko: "\n… (잘림)"
+                    )
                 : result.content
             self.history.append(
                 role: .assistant,
-                content: result.isError ? "执行 \(name) 失败：\n\(preview)" : preview
+                content: result.isError
+                    ? LocalizedString.l(
+                        lang,
+                        en: "Running \(name) failed:\n\(preview)",
+                        zh: "执行 \(name) 失败：\n\(preview)",
+                        ja: "\(name) の実行に失敗しました：\n\(preview)",
+                        ko: "\(name) 실행 실패:\n\(preview)"
+                    )
+                    : preview
             )
 
             self.isRunning = false
@@ -305,11 +379,17 @@ final class AgentCoordinator {
     }
 
     private var helpText: String {
-        """
-        可用命令：
-        \(AgentCommandParser.commandHints.joined(separator: "　"))
-        也可以直接说话，不用斜杠。
-        """
+        let hints = AgentCommandParser.commandHints
+            + AgentRecipeStore.shared.all.compactMap { recipe in
+                recipe.slash.map { "/" + $0 }
+            }
+        return LocalizedString.l(
+            lang,
+            en: "Available commands:\n\(hints.joined(separator: "　"))\nYou can also just talk, no slash needed.",
+            zh: "可用命令：\n\(hints.joined(separator: "　"))\n也可以直接说话，不用斜杠。",
+            ja: "使えるコマンド：\n\(hints.joined(separator: "　"))\nスラッシュなしでそのまま話しかけても大丈夫です。",
+            ko: "사용 가능한 명령:\n\(hints.joined(separator: "　"))\n슬래시 없이 그냥 말해도 됩니다."
+        )
     }
 
     private func appendNotice(_ text: String) {
@@ -360,8 +440,18 @@ final class AgentCoordinator {
         // 干等（我们 90 秒、DSH 60 秒），不如立刻拒绝并说清原因。
         guard AgentApprovalGate.shared.isChatVisible else {
             return .denied(
-                "现在没有可见的对话窗口，无法弹出确认。请先打开 CoolRun 的 AI 面板，"
-                + "再让我做需要写入的操作；或者改用只读的方式回答。"
+                LocalizedString.l(
+                    lang,
+                    en: "There's no visible chat window, so the confirmation can't be shown. "
+                        + "Open CoolRun's AI panel first and then ask me to do a write operation, "
+                        + "or answer in a read-only way.",
+                    zh: "现在没有可见的对话窗口，无法弹出确认。请先打开 CoolRun 的 AI 面板，"
+                        + "再让我做需要写入的操作；或者改用只读的方式回答。",
+                    ja: "表示中の会話ウィンドウがないため確認を出せません。先に CoolRun の AI パネルを開いてから、"
+                        + "書き込みが必要な操作を依頼してください。もしくは読み取り専用の方法で答えます。",
+                    ko: "표시 중인 대화 창이 없어 확인을 띄울 수 없습니다. 먼저 CoolRun의 AI 패널을 연 뒤 "
+                        + "쓰기 작업을 요청해 주세요. 아니면 읽기 전용 방식으로 답하겠습니다."
+                )
             )
         }
 
@@ -421,7 +511,13 @@ final class AgentCoordinator {
         } else if activities.contains(where: { !$0.isFinished }) {
             history.append(
                 role: .assistant,
-                content: "工具执行完毕，但模型没有给出文字结论。可以再问一次。"
+                content: LocalizedString.l(
+                    lang,
+                    en: "The tools ran, but the model didn't give a written conclusion. Try asking again.",
+                    zh: "工具执行完毕，但模型没有给出文字结论。可以再问一次。",
+                    ja: "ツールは実行されましたが、モデルから文章の結論がありませんでした。もう一度聞いてみてください。",
+                    ko: "도구는 실행되었지만 모델이 글로 된 결론을 주지 않았습니다. 다시 물어봐 주세요."
+                )
             )
         }
         isRunning = false
@@ -439,6 +535,15 @@ final class AgentCoordinator {
         if error is CancellationError {
             return
         }
-        errorMessage = error.localizedDescription
+        errorMessage = localized(error)
+    }
+
+    /// 把错误转成当前语言下的文案：AgentError 有专门的本地化文案，
+    /// 其余沿用系统提供的描述。
+    private func localized(_ error: Error) -> String {
+        if let localized = error as? AgentLocalizedError {
+            return localized.localizedMessage(lang)
+        }
+        return error.localizedDescription
     }
 }

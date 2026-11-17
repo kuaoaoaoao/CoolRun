@@ -67,14 +67,26 @@ final class PluginManager {
         var loaded: [InstalledPlugin] = []
         for entry in entries where entry.pathExtension == "coolplugin" {
             guard let manifest = PluginManifest.load(from: entry) else {
-                lastError = "\(entry.lastPathComponent) 的 manifest.json 缺失或格式不对"
+                lastError = LocalizedString.l(
+                    AppSettings.shared.language,
+                    en: "\(entry.lastPathComponent): manifest.json is missing or malformed",
+                    zh: "\(entry.lastPathComponent) 的 manifest.json 缺失或格式不对",
+                    ja: "\(entry.lastPathComponent) の manifest.json が見つからないか形式が正しくありません",
+                    ko: "\(entry.lastPathComponent)의 manifest.json이 없거나 형식이 올바르지 않습니다"
+                )
                 continue
             }
 
             var error: String?
             let scriptURL = entry.appendingPathComponent(manifest.mainScript)
             if !manager.fileExists(atPath: scriptURL.path) {
-                error = "缺少脚本 \(manifest.mainScript)"
+                error = LocalizedString.l(
+                    AppSettings.shared.language,
+                    en: "Missing script \(manifest.mainScript)",
+                    zh: "缺少脚本 \(manifest.mainScript)",
+                    ja: "スクリプトがありません：\(manifest.mainScript)",
+                    ko: "스크립트가 없습니다: \(manifest.mainScript)"
+                )
             }
 
             loaded.append(InstalledPlugin(manifest: manifest, root: entry, loadError: error))
@@ -102,7 +114,8 @@ final class PluginManager {
                         manifest: manifest,
                         spec: spec,
                         arguments: arguments,
-                        root: root
+                        root: root,
+                        lang: AppSettings.shared.language
                     )
                 }
             }
@@ -135,7 +148,7 @@ final class PluginManager {
 
     func install(from source: URL) throws {
         guard let manifest = PluginManifest.load(from: source) else {
-            throw PluginError.invalidManifest
+            throw PluginError.invalidManifest(AppSettings.shared.language)
         }
 
         let destination = Self.rootDirectory.appendingPathComponent("\(manifest.id).coolplugin")
@@ -172,12 +185,18 @@ final class PluginManager {
 // MARK: - 错误
 
 enum PluginError: LocalizedError {
-    case invalidManifest
+    case invalidManifest(AppLanguage)
 
-    var errorDescription: String? {
+    nonisolated var errorDescription: String? {
         switch self {
-        case .invalidManifest:
-            return "manifest.json 格式不对：至少要写 id 和 name"
+        case .invalidManifest(let lang):
+            return LocalizedString.l(
+                lang,
+                en: "manifest.json is invalid: at least id and name are required",
+                zh: "manifest.json 格式不对：至少要写 id 和 name",
+                ja: "manifest.json の形式が正しくありません：id と name は必須です",
+                ko: "manifest.json 형식이 올바르지 않습니다: id와 name은 필수입니다"
+            )
         }
     }
 }

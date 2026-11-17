@@ -155,8 +155,15 @@ final class SwiftAgentEngine: AgentEngine {
                         approval: approvalHandler
                     )
                 )
+                let truncatedMark = LocalizedString.l(
+                    config.lang,
+                    en: "… (result truncated)",
+                    zh: "…（结果已截断）",
+                    ja: "…（結果は切り詰められました）",
+                    ko: "… (결과가 잘렸습니다)"
+                )
                 let output = result.content.count > Self.toolResultLimit
-                    ? String(result.content.prefix(Self.toolResultLimit)) + "\n…（结果已截断）"
+                    ? String(result.content.prefix(Self.toolResultLimit)) + "\n" + truncatedMark
                     : result.content
 
                 working.append(AgentMessage(

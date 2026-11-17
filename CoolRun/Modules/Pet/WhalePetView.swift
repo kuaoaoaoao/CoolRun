@@ -55,6 +55,7 @@ struct WhalePetView: View {
     var animated: Bool = true
 
     private let model = PetModel.shared
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
     @State private var hover = false
 
@@ -76,6 +77,9 @@ struct WhalePetView: View {
                 hover = inside
                 (inside ? NSCursor.openHand : NSCursor.arrow).set()
             }
+            // 气泡文案跟着界面语言走：模型只认传进来的语言，不读全局设置。
+            .onAppear { model.language = settings.language }
+            .onChange(of: settings.language) { _, newValue in model.language = newValue }
     }
 
     /// 播视频还是画立绘。

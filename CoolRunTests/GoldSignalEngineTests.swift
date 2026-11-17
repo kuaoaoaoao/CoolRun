@@ -9,7 +9,8 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
 
         XCTAssertEqual(signal.direction, .buy)
@@ -23,7 +24,8 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
 
         XCTAssertEqual(signal.direction, .sell)
@@ -42,13 +44,15 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
 
         let report = try XCTUnwrap(GoldAdvancedStrategy.analyze(
             records: records,
             snapshot: snapshot,
-            signal: signal
+            signal: signal,
+            lang: .chinese
         ))
 
         XCTAssertEqual(report.compositeDirection, .buy)
@@ -76,7 +80,8 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
         let marketContext = GoldMarketContext(
             macroScore: 20,
@@ -94,7 +99,8 @@ final class GoldSignalEngineTests: XCTestCase {
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: marketContext
+            marketContext: marketContext,
+            lang: .chinese
         ))
 
         // 构造两个方向相反的周预测对象，仅用于证明它们不进入策略
@@ -128,7 +134,8 @@ final class GoldSignalEngineTests: XCTestCase {
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: marketContext
+            marketContext: marketContext,
+            lang: .chinese
         ))
 
         XCTAssertEqual(
@@ -157,7 +164,8 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
         let bullishContext = GoldMarketContext(
             macroScore: 45,
@@ -182,13 +190,15 @@ final class GoldSignalEngineTests: XCTestCase {
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: bullishContext
+            marketContext: bullishContext,
+            lang: .chinese
         ))
         let bearishReport = try XCTUnwrap(GoldAdvancedStrategy.analyze(
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: bearishContext
+            marketContext: bearishContext,
+            lang: .chinese
         ))
 
         XCTAssertGreaterThan(bullishReport.risk.suggestedExposure, bearishReport.risk.suggestedExposure)
@@ -332,7 +342,8 @@ final class GoldSignalEngineTests: XCTestCase {
         let signal = TradingSignalEngine.generateSignal(
             prices: prices,
             currentPrice: prices.last!,
-            snapshot: snapshot
+            snapshot: snapshot,
+            lang: .chinese
         )
         let contextA = GoldMarketContext(
             macroScore: 20,
@@ -358,13 +369,15 @@ final class GoldSignalEngineTests: XCTestCase {
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: contextA
+            marketContext: contextA,
+            lang: .chinese
         ))
         let reportB = try XCTUnwrap(GoldAdvancedStrategy.analyze(
             records: records,
             snapshot: snapshot,
             signal: signal,
-            marketContext: contextB
+            marketContext: contextB,
+            lang: .chinese
         ))
 
         XCTAssertEqual(reportA.compositeDirection, reportB.compositeDirection)

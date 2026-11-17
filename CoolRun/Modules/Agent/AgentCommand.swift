@@ -26,22 +26,23 @@ enum AgentCommandParser {
         let head = String(parts.first ?? "")
         let rest = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : ""
 
-        switch head.lowercased() {
-        case "clear", "清空":
+        let word = head.lowercased()
+        if Self.aliases(en: "clear", zh: "清空", ja: "クリア", ko: "지우기").contains(word) {
             return .clear
-        case "settings", "设置":
+        }
+        if Self.aliases(en: "settings", zh: "设置", ja: "設定", ko: "설정").contains(word) {
             return .openSettings
-        case "help", "帮助":
+        }
+        if Self.aliases(en: "help", zh: "帮助", ja: "ヘルプ", ko: "도움말").contains(word) {
             return .help
-        case "tool":
+        }
+        if word == "tool" {
             return parseTool(rest)
-        default:
-            break
         }
 
         if let recipe = recipes.first(where: { $0.slash == head }) {
             if recipe.needsInput {
-                guard !rest.isEmpty else { return .unknown(recipe.inputHint ?? "还需要补一句内容") }
+                guard !rest.isEmpty else { return .unknown(head) }
                 return .send(recipe.prompt + "\n" + rest)
             }
             return .send(recipe.prompt)
@@ -66,8 +67,20 @@ enum AgentCommandParser {
         return .runTool(name: name, arguments: arguments)
     }
 
-    /// 给输入框的占位提示用的命令清单。
+    /// 四种语言都能用的命令别名 —— 界面语言换了，用户可能仍按母语输入。
+    private nonisolated static func aliases(
+        en: String,
+        zh: String,
+        ja: String,
+        ko: String
+    ) -> Set<String> {
+        Set(AppLanguage.allCases.map {
+            LocalizedString.l($0, en: en, zh: zh, ja: ja, ko: ko).lowercased()
+        })
+    }
+
+    /// 给输入框的占位提示用的命令清单（场景的斜杠别名由调用方从场景列表补上）。
     nonisolated static var commandHints: [String] {
-        ["/体检", "/金价", "/今天", "/记 <内容>", "/提醒 30m 喝水", "/tool system_snapshot", "/help"]
+        ["/tool system_snapshot", "/help"]
     }
 }

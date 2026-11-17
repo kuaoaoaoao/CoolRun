@@ -184,6 +184,7 @@ final class DSHAgentEngine: AgentEngine {
             ].joined(separator: "\n")
         }
 
+        // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
         let base = """
         - insert:
             - id: llm-pi-ai
@@ -229,14 +230,15 @@ final class DSHAgentEngine: AgentEngine {
         let context = recent.compactMap { message -> String? in
             guard !message.content.isEmpty else { return nil }
             let who = switch message.role {
-            case .user: "用户"
-            case .assistant: "助手"
-            case .system: "系统"
-            case .tool: "工具"
+            case .user: "用户"  // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
+            case .assistant: "助手"  // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
+            case .system: "系统"  // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
+            case .tool: "工具"  // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
             }
             return "\(who)：\(message.content)"
         }
         guard !context.isEmpty else { return prompt }
+        // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
         return """
         以下是之前的对话，供参考：
         \(context.joined(separator: "\n"))
@@ -283,7 +285,7 @@ final class DSHAgentEngine: AgentEngine {
             // 上一轮发起的工具调用到这里就算结束了 —— DSH 内部自己执行，
             // 结果不会单独推给我们。
             var events: [AgentEvent] = pending.map {
-                .toolCallFinished(id: $0, name: $0, output: "已完成", isError: false)
+                .toolCallFinished(id: $0, name: $0, output: "已完成", isError: false)  // i18n-allow: 写进 DSH 配置的 YAML 注释 / 喂模型的角色标签与工具结果占位
             }
             pending.removeAll()
             for block in blocks {

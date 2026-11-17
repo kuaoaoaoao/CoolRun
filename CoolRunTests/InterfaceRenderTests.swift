@@ -62,7 +62,8 @@ final class InterfaceRenderTests: XCTestCase {
             GoldAdvancedStrategy.analyze(
                 records: records,
                 snapshot: snapshot,
-                signal: nil
+                signal: nil,
+                lang: .chinese
             )
         )
 

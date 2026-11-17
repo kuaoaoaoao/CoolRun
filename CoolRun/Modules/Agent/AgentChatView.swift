@@ -6,11 +6,14 @@ import SwiftUI
 struct AgentChatView: View {
     @State private var coordinator = AgentCoordinator.shared
     @State private var settings = AgentSettings.shared
+    @ObservedObject private var appSettings = AppSettings.shared
     @State private var inputText = ""
     @State private var showsSettings = false
     @State private var showsTools = false
     @FocusState private var inputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+
+    private var lang: AppLanguage { appSettings.language }
 
     private var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !coordinator.isRunning
@@ -94,7 +97,7 @@ struct AgentChatView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.system(size: 8))
-                        Text("未配置模型 · 去设置")
+                        Text(LocalizedString.l(lang, en: "No model · Open settings", zh: "未配置模型 · 去设置", ja: "モデル未設定 · 設定へ", ko: "모델 미설정 · 설정으로"))
                             .font(.system(size: 10, weight: .medium))
                     }
                     .foregroundStyle(AppTheme.warning)
@@ -109,7 +112,7 @@ struct AgentChatView: View {
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            .help("工具")
+            .help(LocalizedString.l(lang, en: "Tools", zh: "工具", ja: "ツール", ko: "도구"))
 
             Button {
                 showsSettings = true
@@ -118,7 +121,7 @@ struct AgentChatView: View {
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            .help("Agent 设置")
+            .help(LocalizedString.l(lang, en: "Agent settings", zh: "Agent 设置", ja: "Agent 設定", ko: "Agent 설정"))
 
             Button {
                 coordinator.reset()
@@ -127,7 +130,7 @@ struct AgentChatView: View {
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            .help("清空对话")
+            .help(LocalizedString.l(lang, en: "Clear chat", zh: "清空对话", ja: "会話をクリア", ko: "대화 지우기"))
             .disabled(coordinator.isRunning)
         }
         .padding(.horizontal, 16)
@@ -178,9 +181,9 @@ struct AgentChatView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("点一个场景，或者直接说")
+                Text(LocalizedString.l(lang, en: "Pick a scenario, or just ask", zh: "点一个场景，或者直接说", ja: "シナリオを選ぶか、そのまま話しかけてください", ko: "시나리오를 고르거나 그냥 말해 보세요"))
                     .font(.system(size: 14, weight: .semibold))
-                Text("Agent 会自己挑工具、读数据，再把结论讲给你听。")
+                Text(LocalizedString.l(lang, en: "The agent picks its own tools, reads the data, then tells you what it found.", zh: "Agent 会自己挑工具、读数据，再把结论讲给你听。", ja: "Agent が自分でツールを選び、データを読んで、結論を教えてくれます。", ko: "Agent가 스스로 도구를 고르고 데이터를 읽은 뒤 결론을 알려 줍니다."))
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textSecondary(colorScheme))
             }
@@ -197,7 +200,7 @@ struct AgentChatView: View {
                 }
             }
 
-            Text("输入 / 查看快捷指令　·　对话会保存在本地，可逐条删除")
+            Text(LocalizedString.l(lang, en: "Type / for shortcuts　·　Chats are stored locally and can be deleted one by one", zh: "输入 / 查看快捷指令　·　对话会保存在本地，可逐条删除", ja: "「/」でショートカット一覧　·　会話はローカルに保存され、1 件ずつ削除できます", ko: "/ 를 입력해 단축 명령 보기　·　대화는 로컬에 저장되며 하나씩 삭제할 수 있습니다"))
                 .font(.system(size: 10))
                 .foregroundStyle(AppTheme.textSecondary(colorScheme).opacity(0.75))
         }
@@ -268,7 +271,7 @@ struct AgentChatView: View {
             } else if coordinator.activities.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("思考中…")
+                    Text(LocalizedString.l(lang, en: "Thinking…", zh: "思考中…", ja: "考え中…", ko: "생각 중…"))
                         .font(.system(size: 11))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
                 }
@@ -306,7 +309,7 @@ struct AgentChatView: View {
                     Button {
                         showsSettings = true
                     } label: {
-                        Text("去设置")
+                        Text(LocalizedString.l(lang, en: "Open settings", zh: "去设置", ja: "設定を開く", ko: "설정 열기"))
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .buttonStyle(.borderedProminent)
@@ -317,7 +320,7 @@ struct AgentChatView: View {
                     Button {
                         coordinator.retryLast()
                     } label: {
-                        Label("重试", systemImage: "arrow.clockwise")
+                        Label(LocalizedString.l(lang, en: "Retry", zh: "重试", ja: "再試行", ko: "다시 시도"), systemImage: "arrow.clockwise")
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .buttonStyle(.bordered)
@@ -341,7 +344,7 @@ struct AgentChatView: View {
                 Image(systemName: "exclamationmark.shield.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.warning)
-                Text("Agent 想执行「\(request.toolName)」")
+                Text(LocalizedString.l(lang, en: "Agent wants to run \"\(request.toolName)\"", zh: "Agent 想执行「\(request.toolName)」", ja: "Agent が「\(request.toolName)」を実行しようとしています", ko: "Agent가 \"\(request.toolName)\" 실행을 요청합니다"))
                     .font(.system(size: 11, weight: .medium))
                 Spacer()
             }
@@ -360,13 +363,13 @@ struct AgentChatView: View {
             }
 
             HStack(spacing: 8) {
-                Button("允许") {
+                Button(LocalizedString.l(lang, en: "Allow", zh: "允许", ja: "許可", ko: "허용")) {
                     coordinator.resolveApproval(true)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
 
-                Button("拒绝") {
+                Button(LocalizedString.l(lang, en: "Deny", zh: "拒绝", ja: "拒否", ko: "거부")) {
                     coordinator.resolveApproval(false)
                 }
                 .buttonStyle(.bordered)
@@ -374,7 +377,7 @@ struct AgentChatView: View {
 
                 Spacer()
 
-                Text("90 秒后自动拒绝")
+                Text(LocalizedString.l(lang, en: "Auto-denies in 90 s", zh: "90 秒后自动拒绝", ja: "90 秒後に自動で拒否", ko: "90초 후 자동 거부"))
                     .font(.system(size: 9))
                     .foregroundStyle(AppTheme.textSecondary(colorScheme).opacity(0.7))
             }
@@ -390,7 +393,7 @@ struct AgentChatView: View {
         VStack(spacing: 0) {
             Divider().opacity(0.4)
             HStack(spacing: 8) {
-                TextField("问点什么，或输入 / 看指令…", text: $inputText, axis: .vertical)
+                TextField(LocalizedString.l(lang, en: "Ask something, or type / for commands…", zh: "问点什么，或输入 / 看指令…", ja: "何か聞くか、「/」でコマンド一覧…", ko: "무엇이든 물어보거나 / 로 명령 보기…"), text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .lineLimit(1...4)
@@ -409,7 +412,7 @@ struct AgentChatView: View {
                             .foregroundStyle(AppTheme.critical)
                     }
                     .buttonStyle(.plain)
-                    .help("停止")
+                    .help(LocalizedString.l(lang, en: "Stop", zh: "停止", ja: "停止", ko: "중지"))
                 } else {
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
@@ -418,7 +421,7 @@ struct AgentChatView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
-                    .help("发送")
+                    .help(LocalizedString.l(lang, en: "Send", zh: "发送", ja: "送信", ko: "보내기"))
                 }
             }
             .padding(.horizontal, 16)
@@ -446,6 +449,9 @@ struct AgentMessageBubble: View {
     let message: AgentHistoryEntry
     var onDelete: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appSettings = AppSettings.shared
+
+    private var lang: AppLanguage { appSettings.language }
 
     private var isUser: Bool { message.role == .user }
 
@@ -463,13 +469,13 @@ struct AgentMessageBubble: View {
                     in: RoundedRectangle(cornerRadius: 10)
                 )
                 .contextMenu {
-                    Button("复制") {
+                    Button(LocalizedString.l(lang, en: "Copy", zh: "复制", ja: "コピー", ko: "복사")) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(message.content, forType: .string)
                     }
                     if let onDelete {
                         Divider()
-                        Button("删除这条", role: .destructive, action: onDelete)
+                        Button(LocalizedString.l(lang, en: "Delete this message", zh: "删除这条", ja: "このメッセージを削除", ko: "이 메시지 삭제"), role: .destructive, action: onDelete)
                     }
                 }
 
@@ -484,6 +490,9 @@ struct ToolActivityCard: View {
     let activity: AgentToolActivity
     @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appSettings = AppSettings.shared
+
+    private var lang: AppLanguage { appSettings.language }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -514,10 +523,18 @@ struct ToolActivityCard: View {
             if expanded {
                 VStack(alignment: .leading, spacing: 6) {
                     if !activity.argumentsText.isEmpty, activity.argumentsText != "{}" {
-                        detailBlock(title: "参数", text: activity.argumentsText)
+                        detailBlock(
+                            title: LocalizedString.l(lang, en: "Arguments", zh: "参数", ja: "引数", ko: "인수"),
+                            text: activity.argumentsText
+                        )
                     }
                     if let output = activity.output {
-                        detailBlock(title: activity.isError ? "错误" : "结果", text: output)
+                        detailBlock(
+                            title: activity.isError
+                                ? LocalizedString.l(lang, en: "Error", zh: "错误", ja: "エラー", ko: "오류")
+                                : LocalizedString.l(lang, en: "Result", zh: "结果", ja: "結果", ko: "결과"),
+                            text: output
+                        )
                     }
                 }
             }
@@ -541,8 +558,12 @@ struct ToolActivityCard: View {
     }
 
     private var statusText: String {
-        if activity.isError { return "失败" }
-        return activity.isFinished ? "完成" : "执行中"
+        if activity.isError {
+            return LocalizedString.l(lang, en: "Failed", zh: "失败", ja: "失敗", ko: "실패")
+        }
+        return activity.isFinished
+            ? LocalizedString.l(lang, en: "Done", zh: "完成", ja: "完了", ko: "완료")
+            : LocalizedString.l(lang, en: "Running", zh: "执行中", ja: "実行中", ko: "실행 중")
     }
 
     private func detailBlock(title: String, text: String) -> some View {
@@ -565,6 +586,9 @@ struct AgentSettingsPanel: View {
     let onClose: () -> Void
     @State private var settings = AgentSettings.shared
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appSettings = AppSettings.shared
+
+    private var lang: AppLanguage { appSettings.language }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -576,14 +600,14 @@ struct AgentSettingsPanel: View {
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .buttonStyle(.plain)
-                .help("返回对话")
+                .help(LocalizedString.l(lang, en: "Back to chat", zh: "返回对话", ja: "会話に戻る", ko: "대화로 돌아가기"))
 
-                Text("Agent 设置")
+                Text(LocalizedString.l(lang, en: "Agent settings", zh: "Agent 设置", ja: "Agent 設定", ko: "Agent 설정"))
                     .font(.system(size: 13, weight: .semibold))
 
                 Spacer()
 
-                Button("完成") { onClose() }
+                Button(LocalizedString.l(lang, en: "Done", zh: "完成", ja: "完了", ko: "완료")) { onClose() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.accent)
@@ -595,11 +619,11 @@ struct AgentSettingsPanel: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    field(title: "引擎") {
+                    field(title: LocalizedString.l(lang, en: "Engine", zh: "引擎", ja: "エンジン", ko: "엔진")) {
                         AgentEngineSettingsSection()
                     }
 
-                    field(title: "接入协议") {
+                    field(title: LocalizedString.l(lang, en: "Protocol", zh: "接入协议", ja: "接続プロトコル", ko: "연결 프로토콜")) {
                         Picker("", selection: $settings.protocolKind) {
                             ForEach(AgentWireProtocol.allCases) { kind in
                                 Text(kind.shortName).tag(kind)
@@ -610,19 +634,19 @@ struct AgentSettingsPanel: View {
                         .onChange(of: settings.protocolKind) { _, _ in
                             settings.applyProtocolDefaults()
                         }
-                        Text(settings.protocolKind.subtitle)
+                        Text(settings.protocolKind.subtitle(lang))
                             .font(.system(size: 10))
                             .foregroundStyle(AppTheme.textSecondary(colorScheme))
                     }
 
-                    field(title: "接口地址") {
+                    field(title: LocalizedString.l(lang, en: "Endpoint", zh: "接口地址", ja: "エンドポイント", ko: "엔드포인트")) {
                         TextField("https://…", text: $settings.baseURL)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                     }
 
-                    field(title: "模型") {
-                        TextField("模型名称", text: $settings.model)
+                    field(title: LocalizedString.l(lang, en: "Model", zh: "模型", ja: "モデル", ko: "모델")) {
+                        TextField(LocalizedString.l(lang, en: "Model name", zh: "模型名称", ja: "モデル名", ko: "모델 이름"), text: $settings.model)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                     }
@@ -632,14 +656,18 @@ struct AgentSettingsPanel: View {
                             SecureField("sk-…", text: $settings.apiKey)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 11, design: .monospaced))
-                            Text("保存在系统钥匙串，不会写入偏好文件。")
+                            Text(LocalizedString.l(lang, en: "Stored in the system Keychain, never written to preferences.", zh: "保存在系统钥匙串，不会写入偏好文件。", ja: "システムキーチェーンに保存され、設定ファイルには書き込まれません。", ko: "시스템 키체인에 저장되며 환경설정 파일에는 기록되지 않습니다."))
                                 .font(.system(size: 10))
                                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
                         }
                     }
 
-                    field(title: "工具调用上限") {
-                        Stepper("最多 \(settings.maxRounds) 轮", value: $settings.maxRounds, in: 1...12)
+                    field(title: LocalizedString.l(lang, en: "Tool call limit", zh: "工具调用上限", ja: "ツール呼び出し上限", ko: "도구 호출 한도")) {
+                        Stepper(
+                            LocalizedString.l(lang, en: "Up to \(settings.maxRounds) rounds", zh: "最多 \(settings.maxRounds) 轮", ja: "最大 \(settings.maxRounds) ラウンド", ko: "최대 \(settings.maxRounds) 라운드"),
+                            value: $settings.maxRounds,
+                            in: 1...12
+                        )
                             .font(.system(size: 11))
                     }
 
@@ -648,13 +676,13 @@ struct AgentSettingsPanel: View {
                     Button {
                         settings.adoptFromAssistant()
                     } label: {
-                        Label("从 AI 助手同步配置", systemImage: "arrow.triangle.2.circlepath")
+                        Label(LocalizedString.l(lang, en: "Sync from AI Assistant", zh: "从 AI 助手同步配置", ja: "AI アシスタントから同期", ko: "AI 어시스턴트에서 동기화"), systemImage: "arrow.triangle.2.circlepath")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(AppTheme.accent)
 
-                    field(title: "工具权限") {
+                    field(title: LocalizedString.l(lang, en: "Tool permissions", zh: "工具权限", ja: "ツール権限", ko: "도구 권한")) {
                         Picker("", selection: $settings.toolLevel) {
                             ForEach(ToolPermission.allCases, id: \.self) { permission in
                                 Text(permissionLabel(permission)).tag(permission)
@@ -662,7 +690,7 @@ struct AgentSettingsPanel: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        Text("L2 及以上的工具在每次执行前都会弹确认条。")
+                        Text(LocalizedString.l(lang, en: "Tools at L2 and above ask for confirmation before every run.", zh: "L2 及以上的工具在每次执行前都会弹确认条。", ja: "L2 以上のツールは実行のたびに確認バーが出ます。", ko: "L2 이상 도구는 실행할 때마다 확인 바가 표시됩니다."))
                             .font(.system(size: 10))
                             .foregroundStyle(AppTheme.textSecondary(colorScheme))
                     }
@@ -683,10 +711,14 @@ struct AgentSettingsPanel: View {
 
     private func permissionLabel(_ permission: ToolPermission) -> String {
         switch permission {
-        case .read: return "只读（L0）"
-        case .reversible: return "可逆写入（L1）"
-        case .persistent: return "持久写入（L2，每次确认）"
-        case .dangerous: return "危险（L3，默认关闭）"
+        case .read:
+            return LocalizedString.l(lang, en: "Read-only (L0)", zh: "只读（L0）", ja: "読み取り専用（L0）", ko: "읽기 전용(L0)")
+        case .reversible:
+            return LocalizedString.l(lang, en: "Reversible write (L1)", zh: "可逆写入（L1）", ja: "可逆書き込み（L1）", ko: "되돌릴 수 있는 쓰기(L1)")
+        case .persistent:
+            return LocalizedString.l(lang, en: "Persistent write (L2, confirm each time)", zh: "持久写入（L2，每次确认）", ja: "永続書き込み（L2、毎回確認）", ko: "영구 쓰기(L2, 매번 확인)")
+        case .dangerous:
+            return LocalizedString.l(lang, en: "Dangerous (L3, off by default)", zh: "危险（L3，默认关闭）", ja: "危険（L3、既定でオフ）", ko: "위험(L3, 기본 꺼짐)")
         }
     }
 }

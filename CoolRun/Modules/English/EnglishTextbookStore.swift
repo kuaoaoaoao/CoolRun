@@ -363,12 +363,12 @@ private extension EnglishTextbookStore {
 
     static func normalizedHeader(_ value: String) -> String? {
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "word", "title", "english", "单词", "英文": return "word"
-        case "translation", "meaning", "chinese", "释义", "中文", "意思": return "translation"
-        case "pronunciation", "phonetic", "音标", "发音": return "pronunciation"
-        case "part", "partofspeech", "pos", "词性": return "part"
-        case "example", "sentence", "例句": return "example"
-        case "exampletranslation", "example_translation", "例句翻译": return "exampleTranslation"
+        case "word", "title", "english", "单词", "英文": return "word"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
+        case "translation", "meaning", "chinese", "释义", "中文", "意思": return "translation"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
+        case "pronunciation", "phonetic", "音标", "发音": return "pronunciation"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
+        case "part", "partofspeech", "pos", "词性": return "part"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
+        case "example", "sentence", "例句": return "example"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
+        case "exampletranslation", "example_translation", "例句翻译": return "exampleTranslation"  // i18n-allow: CSV 表头别名匹配（本地化会弄坏导入）
         default: return nil
         }
     }

@@ -3,6 +3,7 @@ import AppKit
 
 struct AdvancedStrategyCard: View {
     let report: GoldAdvancedStrategyReport
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
 
     private var tint: Color {
@@ -31,8 +32,8 @@ struct AdvancedStrategyCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             AdvancedStrategyHeader(
-                title: report.regime.regime.displayName,
-                strategy: report.regime.regime.strategyLabel,
+                title: report.regime.regime.displayName(lang: settings.language),
+                strategy: report.regime.regime.strategyLabel(lang: settings.language),
                 tint: tint
             )
 
@@ -44,7 +45,7 @@ struct AdvancedStrategyCard: View {
                 StrategyMetric(
                     title: LocalizedString.gold("trend_strength"),
                     value: report.regime.adx.shortNumber,
-                    detail: report.regime.volatilityRegime.displayName,
+                    detail: report.regime.volatilityRegime.displayName(lang: settings.language),
                     help: LocalizedString.l(AppSettings.shared.language, en: "Higher values mean price is moving more clearly in one direction.", zh: "越高说明价格越像沿着一个方向走。", ja: "値が高いほど、価格が一方向に動きやすいことを示します。", ko: "값이 높을수록 가격이 한 방향으로 움직이는 경향이 강합니다.")
                 )
                 StrategyMetric(

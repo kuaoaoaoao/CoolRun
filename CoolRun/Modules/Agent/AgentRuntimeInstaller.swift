@@ -27,15 +27,64 @@ final class AgentRuntimeInstaller {
             }
         }
 
-        var label: String {
+        func label(_ lang: AppLanguage) -> String {
             switch self {
-            case .idle: return "未安装"
-            case .preparing: return "查询版本…"
-            case .downloading(let progress): return "下载中 \(Int(progress * 100))%"
-            case .verifying: return "校验中…"
-            case .extracting: return "解包中…"
-            case .done: return "已安装"
-            case .failed(let message): return "失败：\(message)"
+            case .idle:
+                return LocalizedString.l(
+                    lang,
+                    en: "Not installed",
+                    zh: "未安装",
+                    ja: "未インストール",
+                    ko: "설치 안 됨"
+                )
+            case .preparing:
+                return LocalizedString.l(
+                    lang,
+                    en: "Checking version…",
+                    zh: "查询版本…",
+                    ja: "バージョン確認中…",
+                    ko: "버전 확인 중…"
+                )
+            case .downloading(let progress):
+                return LocalizedString.l(
+                    lang,
+                    en: "Downloading \(Int(progress * 100))%",
+                    zh: "下载中 \(Int(progress * 100))%",
+                    ja: "ダウンロード中 \(Int(progress * 100))%",
+                    ko: "다운로드 중 \(Int(progress * 100))%"
+                )
+            case .verifying:
+                return LocalizedString.l(
+                    lang,
+                    en: "Verifying…",
+                    zh: "校验中…",
+                    ja: "検証中…",
+                    ko: "검사 중…"
+                )
+            case .extracting:
+                return LocalizedString.l(
+                    lang,
+                    en: "Unpacking…",
+                    zh: "解包中…",
+                    ja: "展開中…",
+                    ko: "압축 해제 중…"
+                )
+            case .done:
+                return LocalizedString.l(
+                    lang,
+                    en: "Installed",
+                    zh: "已安装",
+                    ja: "インストール済み",
+                    ko: "설치됨"
+                )
+            case .failed(let message):
+                return LocalizedString.l(
+                    lang,
+                    en: "Failed: \(message)",
+                    zh: "失败：\(message)",
+                    ja: "失敗：\(message)",
+                    ko: "실패: \(message)"
+                )
             }
         }
     }
@@ -79,7 +128,8 @@ final class AgentRuntimeInstaller {
             AgentRuntimeLocator.shared.refresh()
             state = .done
         } catch {
-            state = .failed(error.localizedDescription)
+            let lang = AppSettings.shared.language
+            state = .failed((error as? AgentLocalizedError)?.localizedMessage(lang) ?? error.localizedDescription)
         }
     }
 
@@ -257,20 +307,59 @@ final class AgentRuntimeInstaller {
 
     // MARK: 错误
 
-    enum InstallError: LocalizedError {
+    enum InstallError: LocalizedError, AgentLocalizedError {
         case badResponse
         case unsupportedPlatform
         case checksumMismatch
         case unzipFailed
         case missingExecutable
 
-        var errorDescription: String? {
+        nonisolated var errorDescription: String? {
+            localizedMessage(.chinese)
+        }
+
+        nonisolated func localizedMessage(_ lang: AppLanguage) -> String {
             switch self {
-            case .badResponse: return "PyPI 返回的数据看不懂"
-            case .unsupportedPlatform: return "这个版本没有 Apple 芯片的包"
-            case .checksumMismatch: return "下载的文件校验不通过，可能被改过"
-            case .unzipFailed: return "解包失败"
-            case .missingExecutable: return "包里找不到可执行文件"
+            case .badResponse:
+                return LocalizedString.l(
+                    lang,
+                    en: "Couldn't parse the response from PyPI",
+                    zh: "PyPI 返回的数据看不懂",
+                    ja: "PyPI の応答を解釈できません",
+                    ko: "PyPI 응답을 해석할 수 없습니다"
+                )
+            case .unsupportedPlatform:
+                return LocalizedString.l(
+                    lang,
+                    en: "No Apple silicon build in this version",
+                    zh: "这个版本没有 Apple 芯片的包",
+                    ja: "このバージョンには Apple シリコン用のパッケージがありません",
+                    ko: "이 버전에는 Apple Silicon용 패키지가 없습니다"
+                )
+            case .checksumMismatch:
+                return LocalizedString.l(
+                    lang,
+                    en: "Downloaded file failed checksum verification — it may have been tampered with",
+                    zh: "下载的文件校验不通过，可能被改过",
+                    ja: "ダウンロードしたファイルの検証に失敗しました。改ざんされた可能性があります",
+                    ko: "다운로드한 파일의 검증에 실패했습니다. 변조되었을 수 있습니다"
+                )
+            case .unzipFailed:
+                return LocalizedString.l(
+                    lang,
+                    en: "Failed to unpack the archive",
+                    zh: "解包失败",
+                    ja: "展開に失敗しました",
+                    ko: "압축 해제에 실패했습니다"
+                )
+            case .missingExecutable:
+                return LocalizedString.l(
+                    lang,
+                    en: "No executable found in the package",
+                    zh: "包里找不到可执行文件",
+                    ja: "パッケージ内に実行ファイルが見つかりません",
+                    ko: "패키지에서 실행 파일을 찾을 수 없습니다"
+                )
             }
         }
     }

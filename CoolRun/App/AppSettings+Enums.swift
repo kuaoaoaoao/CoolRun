@@ -11,9 +11,9 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
-        case .chinese: return "简体中文"
+        case .chinese: return "简体中文"  // i18n-allow: 语言自称：每种语言用本语言名显示
         case .english: return "English"
-        case .japanese: return "日本語"
+        case .japanese: return "日本語"  // i18n-allow: 语言自称：每种语言用本语言名显示
         case .korean: return "한국어"
         }
     }

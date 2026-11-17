@@ -186,16 +186,13 @@ struct DataBackupCard: View {
         let englishCount = EnglishProgressStore.shared.records.count
         let goldCount = GoldPriceStore.shared.records.count
 
-        switch settings.language {
-        case .chinese:
-            return "\(birthdayCount) 条生日 · \(countdownCount) 个倒数日 · \(englishCount) 条进度 · \(goldCount) 条金价"
-        case .japanese:
-            return "\(birthdayCount) 件の誕生日 · \(countdownCount) 件のカウントダウン · \(englishCount) 件の進捗 · \(goldCount) 件の価格"
-        case .korean:
-            return "\(birthdayCount) 생일 · \(countdownCount) 카운트다운 · \(englishCount) 학습 기록 · \(goldCount) 가격 기록"
-        case .english:
-            return "\(birthdayCount) birthdays · \(countdownCount) countdowns · \(englishCount) words · \(goldCount) prices"
-        }
+        return LocalizedString.l(
+            settings.language,
+            en: "\(birthdayCount) birthdays · \(countdownCount) countdowns · \(englishCount) words · \(goldCount) prices",
+            zh: "\(birthdayCount) 条生日 · \(countdownCount) 个倒数日 · \(englishCount) 条进度 · \(goldCount) 条金价",
+            ja: "\(birthdayCount) 件の誕生日 · \(countdownCount) 件のカウントダウン · \(englishCount) 件の進捗 · \(goldCount) 件の価格",
+            ko: "\(birthdayCount) 생일 · \(countdownCount) 카운트다운 · \(englishCount) 학습 기록 · \(goldCount) 가격 기록"
+        )
     }
 
     private func clearMessageAfterDelay() {
@@ -479,14 +476,8 @@ struct HolidayUpdateCard: View {
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = settings.language.locale
-        switch settings.language {
-        case .chinese, .japanese:
-            formatter.dateFormat = "yyyy年M月d日 HH:mm"
-        case .korean:
-            formatter.dateFormat = "yyyy년 M월 d일 HH:mm"
-        case .english:
-            formatter.dateFormat = "MMM d, yyyy HH:mm"
-        }
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
         return formatter.string(from: date)
     }
 }

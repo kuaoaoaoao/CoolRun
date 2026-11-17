@@ -125,7 +125,13 @@ final class MorningBriefStore {
             id: "patrol",
             icon: "stethoscope",
             title: finding.title,
-            detail: "去看看",
+            detail: LocalizedString.l(
+                AppSettings.shared.language,
+                en: "Take a look",
+                zh: "去看看",
+                ja: "見てみる",
+                ko: "확인해 보기"
+            ),
             tone: tone,
             destination: .diagnostics
         )
@@ -151,7 +157,13 @@ final class MorningBriefStore {
         do {
             config = try AgentSettings.shared.makeConfig()
         } catch {
-            refineError = "先在 Agent 设置里配置模型"
+            refineError = LocalizedString.l(
+                AppSettings.shared.language,
+                en: "Configure a model in Agent Settings first",
+                zh: "先在 Agent 设置里配置模型",
+                ja: "先に Agent 設定でモデルを構成してください",
+                ko: "먼저 Agent 설정에서 모델을 구성하세요"
+            )
             return
         }
 
@@ -181,7 +193,13 @@ final class MorningBriefStore {
             }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                refineError = "模型没返回内容"
+                refineError = LocalizedString.l(
+                    AppSettings.shared.language,
+                    en: "The model returned nothing",
+                    zh: "模型没返回内容",
+                    ja: "モデルが内容を返しませんでした",
+                    ko: "모델이 내용을 반환하지 않았습니다"
+                )
                 return
             }
             brief.summary = trimmed

@@ -91,15 +91,9 @@ struct UptimeMetrics: Equatable {
         let lang = AppSettings.shared.language
 
         var parts: [String] = []
-        if lang == .chinese {
-            if days > 0 { parts.append("\(days)天") }
-            if hours > 0 { parts.append("\(hours)小时") }
-            if minutes > 0 || parts.isEmpty { parts.append("\(minutes)分钟") }
-        } else {
-            if days > 0 { parts.append("\(days)d") }
-            if hours > 0 { parts.append("\(hours)h") }
-            if minutes > 0 || parts.isEmpty { parts.append("\(minutes)m") }
-        }
+        if days > 0 { parts.append("\(days)\(Self.dayUnit(lang))") }
+        if hours > 0 { parts.append("\(hours)\(Self.hourUnit(lang))") }
+        if minutes > 0 || parts.isEmpty { parts.append("\(minutes)\(Self.minuteUnit(lang))") }
         return parts.joined(separator: " ")
     }
 
@@ -109,24 +103,32 @@ struct UptimeMetrics: Equatable {
         let hours = (Int(uptime) % 86400) / 3600
         let minutes = (Int(uptime) % 3600) / 60
         let lang = AppSettings.shared.language
+        let gap = lang == .chinese || lang == .japanese || lang == .korean ? "" : " "
 
-        if lang == .chinese {
-            if days > 0 {
-                return "\(days)天\(hours)时"
-            } else if hours > 0 {
-                return "\(hours)时\(minutes)分"
-            } else {
-                return "\(minutes)分"
-            }
+        if days > 0 {
+            return "\(days)\(Self.dayUnit(lang))\(gap)\(hours)\(Self.compactHourUnit(lang))"
+        } else if hours > 0 {
+            return "\(hours)\(Self.compactHourUnit(lang))\(gap)\(minutes)\(Self.minuteUnit(lang))"
         } else {
-            if days > 0 {
-                return "\(days)d \(hours)h"
-            } else if hours > 0 {
-                return "\(hours)h \(minutes)m"
-            } else {
-                return "\(minutes)m"
-            }
+            return "\(minutes)\(Self.minuteUnit(lang))"
         }
+    }
+
+    private static func dayUnit(_ lang: AppLanguage) -> String {
+        LocalizedString.l(lang, en: "d", zh: "天", ja: "日", ko: "일")
+    }
+
+    private static func hourUnit(_ lang: AppLanguage) -> String {
+        LocalizedString.l(lang, en: "h", zh: "小时", ja: "時間", ko: "시간")
+    }
+
+    private static func minuteUnit(_ lang: AppLanguage) -> String {
+        LocalizedString.l(lang, en: "m", zh: "分钟", ja: "分", ko: "분")
+    }
+
+    /// 紧凑写法里小时用单字（「3时12分」），与完整写法（「3小时」）区分。
+    private static func compactHourUnit(_ lang: AppLanguage) -> String {
+        LocalizedString.l(lang, en: "h", zh: "时", ja: "時", ko: "시")
     }
 }
 

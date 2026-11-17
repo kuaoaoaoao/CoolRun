@@ -7,7 +7,10 @@ import SwiftUI
 struct MorningBriefCard: View {
 
     @State private var store = MorningBriefStore.shared
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.colorScheme) private var colorScheme
+
+    private var lang: AppLanguage { settings.language }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,11 +39,11 @@ struct MorningBriefCard: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(store.brief?.greeting ?? "你好")
+            Text(store.brief?.greeting ?? LocalizedString.l(lang, en: "Hello", zh: "你好", ja: "こんにちは", ko: "안녕하세요"))
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(AppTheme.textPrimary(colorScheme))
             Spacer(minLength: 8)
-            Text(Self.dateText(Date()))
+            Text(Self.dateText(Date(), lang: lang))
                 .font(.system(size: 11))
                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
         }
@@ -98,7 +101,15 @@ struct MorningBriefCard: View {
             Image(systemName: "leaf.fill")
                 .font(.system(size: 11))
                 .foregroundStyle(AppTheme.healthy)
-            Text("今天没什么特别的，该干嘛干嘛。")
+            Text(
+                LocalizedString.l(
+                    lang,
+                    en: "Nothing special today. Carry on.",
+                    zh: "今天没什么特别的，该干嘛干嘛。",
+                    ja: "今日は特に変わったことはありません。いつも通りに。",
+                    ko: "오늘은 특별한 일이 없습니다. 하던 일을 하세요."
+                )
+            )
                 .font(.system(size: 12))
                 .foregroundStyle(AppTheme.textSecondary(colorScheme))
         }
@@ -149,7 +160,13 @@ struct MorningBriefCard: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 10, weight: .medium))
                     }
-                    Text(store.isRefining ? "在想…" : (brief.summary == nil ? "让本鱼说说" : "再说一遍"))
+                    Text(
+                        store.isRefining
+                            ? LocalizedString.l(lang, en: "Thinking…", zh: "在想…", ja: "考え中…", ko: "생각 중…")
+                            : (brief.summary == nil
+                                ? LocalizedString.l(lang, en: "Let me summarize", zh: "让本鱼说说", ja: "まとめてみる", ko: "정리해 볼게")
+                                : LocalizedString.l(lang, en: "Say it again", zh: "再说一遍", ja: "もう一度", ko: "다시 말하기"))
+                    )
                         .font(.system(size: 11))
                 }
                 .foregroundStyle(AppTheme.accent)
@@ -175,21 +192,17 @@ struct MorningBriefCard: View {
             }
             .buttonStyle(.plain)
             .disabled(store.isRefreshing)
-            .help("重新生成")
+            .help(LocalizedString.l(lang, en: "Regenerate", zh: "重新生成", ja: "再生成", ko: "다시 생성"))
         }
         .padding(.top, 12)
     }
 
     // MARK: 日期
 
-    nonisolated private static let weekdayFormatter: DateFormatter = {
+    private static func dateText(_ date: Date, lang: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 EEEE"
-        return formatter
-    }()
-
-    nonisolated private static func dateText(_ date: Date) -> String {
-        weekdayFormatter.string(from: date)
+        formatter.locale = lang.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMdEEEE")
+        return formatter.string(from: date)
     }
 }

@@ -4,18 +4,23 @@ import XCTest
 /// 桌宠的表现状态。用单例本身测，因为窗口、气泡都挂在它上面。
 final class PetModelTests: XCTestCase {
     func testFriendlyToolNameIsHumanReadable() {
-        XCTAssertEqual(PetModel.friendlyTool("gold_price"), "查金价")
-        XCTAssertEqual(PetModel.friendlyTool("notes_create"), "记笔记")
-        XCTAssertEqual(PetModel.friendlyTool("plugin_com_coolrun_demo_now"), "用插件")
+        XCTAssertEqual(PetModel.friendlyTool("gold_price", lang: .chinese), "查金价")
+        XCTAssertEqual(PetModel.friendlyTool("notes_create", lang: .chinese), "记笔记")
+        XCTAssertEqual(PetModel.friendlyTool("plugin_com_coolrun_demo_now", lang: .chinese), "用插件")
         // 不认识的工具原样透出，别把信息吞掉
-        XCTAssertEqual(PetModel.friendlyTool("some_new_tool"), "some_new_tool")
+        XCTAssertEqual(PetModel.friendlyTool("some_new_tool", lang: .chinese), "some_new_tool")
+    }
+
+    func testFriendlyToolNameFollowsLanguage() {
+        XCTAssertEqual(PetModel.friendlyTool("gold_price", lang: .english), "Gold price")
+        XCTAssertEqual(PetModel.friendlyTool("some_new_tool", lang: .japanese), "some_new_tool")
     }
 
     func testBubbleTextPerMood() {
-        XCTAssertNil(PetModel.bubbleText(for: .idle))
-        XCTAssertEqual(PetModel.bubbleText(for: .sleeping), "z Z")
-        XCTAssertEqual(PetModel.bubbleText(for: .working("查金价")), "在用「查金价」")
-        XCTAssertEqual(PetModel.bubbleText(for: .waiting), "等你点一下下～")
+        XCTAssertNil(PetModel.bubbleText(for: .idle, lang: .chinese))
+        XCTAssertEqual(PetModel.bubbleText(for: .sleeping, lang: .chinese), "z Z")
+        XCTAssertEqual(PetModel.bubbleText(for: .working("查金价"), lang: .chinese), "在用「查金价」")
+        XCTAssertEqual(PetModel.bubbleText(for: .waiting, lang: .chinese), "等你点一下下～")
     }
 
     func testWaitingWigglesFasterThanIdle() {

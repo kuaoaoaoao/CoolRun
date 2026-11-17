@@ -368,8 +368,9 @@ private struct AIUsageOverviewView: View {
     }
 
     private func refreshAll() {
-        Task { await codexViewModel.refresh() }
-        Task { await claudeViewModel.refresh() }
+        let lang = settings.language
+        Task { await codexViewModel.refresh(lang: lang) }
+        Task { await claudeViewModel.refresh(lang: lang) }
     }
 
     private func providerSubtitle(_ summary: AIProviderOverview) -> String {
@@ -476,6 +477,13 @@ private struct AIQuotaRunway: View {
 struct ClaudeMonitorView: View {
     @State private var viewModel: ClaudeMonitorViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var settings = AppSettings.shared
+
+    private var lang: AppLanguage { settings.language }
+
+    private func localized(en: String, zh: String, ja: String, ko: String) -> String {
+        LocalizedString.l(settings.language, en: en, zh: zh, ja: ja, ko: ko)
+    }
 
     @MainActor
     init() {
@@ -500,9 +508,19 @@ struct ClaudeMonitorView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Claude 监控")
+                    Text(localized(
+                        en: "Claude Monitor",
+                        zh: "Claude 监控",
+                        ja: "Claude モニター",
+                        ko: "Claude 모니터"
+                    ))
                         .font(.headline)
-                    Text("Claude Code 5 小时与周额度")
+                    Text(localized(
+                        en: "Claude Code 5-hour and weekly quotas",
+                        zh: "Claude Code 5 小时与周额度",
+                        ja: "Claude Code の 5 時間・週次クォータ",
+                        ko: "Claude Code 5시간 및 주간 할당량"
+                    ))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -510,7 +528,7 @@ struct ClaudeMonitorView: View {
                 Spacer()
 
                 Button {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.refresh(lang: lang) }
                 } label: {
                     if viewModel.isRefreshing {
                         ProgressView().controlSize(.mini)
@@ -523,21 +541,56 @@ struct ClaudeMonitorView: View {
                 .buttonBorderShape(.circle)
                 .controlSize(.small)
                 .disabled(viewModel.isRefreshing)
-                .accessibilityLabel("刷新 Claude 状态")
-                .help("刷新 Claude 状态")
+                .accessibilityLabel(localized(
+                    en: "Refresh Claude status",
+                    zh: "刷新 Claude 状态",
+                    ja: "Claude の状態を更新",
+                    ko: "Claude 상태 새로고침"
+                ))
+                .help(localized(
+                    en: "Refresh Claude status",
+                    zh: "刷新 Claude 状态",
+                    ja: "Claude の状態を更新",
+                    ko: "Claude 상태 새로고침"
+                ))
             }
 
             ScrollView(.vertical, showsIndicators: false) {
                 Group {
                     switch viewModel.state {
                     case .loading:
-                        ProgressView("正在读取 Claude 用量…")
+                        ProgressView(localized(
+                            en: "Reading Claude usage…",
+                            zh: "正在读取 Claude 用量…",
+                            ja: "Claude の使用量を読み取り中…",
+                            ko: "Claude 사용량을 읽는 중…"
+                        ))
                             .controlSize(.small)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     case let .unavailable(message):
-                        statusCard(icon: "exclamationmark.triangle", color: .orange, title: "暂时无法读取", detail: message)
+                        statusCard(
+                            icon: "exclamationmark.triangle",
+                            color: .orange,
+                            title: localized(
+                                en: "Unable to read right now",
+                                zh: "暂时无法读取",
+                                ja: "現在読み取れません",
+                                ko: "지금은 읽을 수 없습니다"
+                            ),
+                            detail: message
+                        )
                     case let .notLoggedIn(detail):
-                        statusCard(icon: "person.crop.circle.badge.xmark", color: .secondary, title: "Claude 未登录", detail: detail)
+                        statusCard(
+                            icon: "person.crop.circle.badge.xmark",
+                            color: .secondary,
+                            title: localized(
+                                en: "Claude not signed in",
+                                zh: "Claude 未登录",
+                                ja: "Claude にログインしていません",
+                                ko: "Claude 로그인 안 됨"
+                            ),
+                            detail: detail
+                        )
                     case let .ready(snapshot):
                         readyView(snapshot)
                     }
@@ -567,16 +620,21 @@ struct ClaudeMonitorView: View {
             .background(AppTheme.elevatedSurface(colorScheme), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 6) {
-                quickAction("用量详情", icon: "gauge.with.dots.needle.50percent") {
+                quickAction(localized(en: "Usage details", zh: "用量详情", ja: "使用量の詳細", ko: "사용량 상세"), icon: "gauge.with.dots.needle.50percent") {
                     openURL("https://claude.ai/settings/usage")
                 }
-                quickAction("打开 Claude", icon: "bubble.left.and.bubble.right") {
+                quickAction(localized(en: "Open Claude", zh: "打开 Claude", ja: "Claude を開く", ko: "Claude 열기"), icon: "bubble.left.and.bubble.right") {
                     openURL("https://claude.ai")
                 }
             }
 
             if snapshot.windows.isEmpty {
-                Text("暂无额度数据")
+                Text(localized(
+                    en: "No quota data yet",
+                    zh: "暂无额度数据",
+                    ja: "クォータのデータがありません",
+                    ko: "할당량 데이터가 없습니다"
+                ))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
             }
@@ -592,7 +650,7 @@ struct ClaudeMonitorView: View {
             }
 
             HStack {
-                Text("每 60 秒刷新")
+                Text(localized(en: "Refreshes every 60s", zh: "每 60 秒刷新", ja: "60 秒ごとに更新", ko: "60초마다 새로고침"))
                 Spacer()
                 Text(snapshot.updatedAt.formatted(date: .omitted, time: .standard))
                     .monospacedDigit()
@@ -605,7 +663,7 @@ struct ClaudeMonitorView: View {
         let pace = window.pace()
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("\(window.title) · \(window.durationText)")
+                Text("\(window.title) · \(window.durationText(lang: lang))")
                     .font(.system(size: 9, weight: .medium))
                 Spacer()
                 if let pace {
@@ -630,7 +688,12 @@ struct ClaudeMonitorView: View {
                 Text(resetCountdown(window.resetsAt))
                 Spacer()
                 if let pace {
-                    Text("节奏线 \(Int(pace.expectedRemainingPercent.rounded()))%")
+                    Text(localized(
+                        en: "Pace \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        zh: "节奏线 \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        ja: "ペースライン \(Int(pace.expectedRemainingPercent.rounded()))%",
+                        ko: "페이스 \(Int(pace.expectedRemainingPercent.rounded()))%"
+                    ))
                 } else {
                     Text(resetText(window.resetsAt))
                 }
@@ -643,7 +706,7 @@ struct ClaudeMonitorView: View {
     private func extraUsageCard(_ extra: ClaudeExtraUsage) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Label("按量加购", systemImage: "creditcard")
+                Label(localized(en: "Pay-as-you-go", zh: "按量加购", ja: "従量課金", ko: "종량제 추가 구매"), systemImage: "creditcard")
                     .font(.system(size: 10, weight: .semibold))
                 Spacer()
                 Text(String(format: "%.2f / %.0f %@", extra.usedCredits, extra.monthlyLimit, extra.currency ?? "USD"))
@@ -702,10 +765,10 @@ struct ClaudeMonitorView: View {
 
     private func paceText(_ status: CodexQuotaPace.Status) -> String {
         switch status {
-        case .balanced: "节奏正常"
-        case .comfortable: "额度充足"
-        case .fast: "消耗偏快"
-        case .critical: "额度紧张"
+        case .balanced: localized(en: "On pace", zh: "节奏正常", ja: "ペース正常", ko: "정상 흐름")
+        case .comfortable: localized(en: "Plenty left", zh: "额度充足", ja: "余裕あり", ko: "여유 충분")
+        case .fast: localized(en: "Burning fast", zh: "消耗偏快", ja: "消費が速い", ko: "소비 빠름")
+        case .critical: localized(en: "Tight", zh: "额度紧张", ja: "残りわずか", ko: "부족")
         }
     }
 
@@ -724,18 +787,49 @@ struct ClaudeMonitorView: View {
     }
 
     private func resetCountdown(_ date: Date?) -> String {
-        guard let date else { return "重置时间未知" }
+        guard let date else { return localized(en: "Reset time unknown", zh: "重置时间未知", ja: "リセット時刻不明", ko: "재설정 시각 알 수 없음") }
         let seconds = max(0, Int(date.timeIntervalSinceNow))
-        if seconds < 60 { return "不到 1 分钟后重置" }
-        if seconds < 3600 { return "\(seconds / 60) 分钟后重置" }
+        if seconds < 60 { return localized(en: "Resets in under a minute", zh: "不到 1 分钟后重置", ja: "1 分以内にリセット", ko: "1분 이내 재설정") }
+        if seconds < 3600 {
+            return localized(
+                en: "Resets in \(seconds / 60) min",
+                zh: "\(seconds / 60) 分钟后重置",
+                ja: "\(seconds / 60) 分後にリセット",
+                ko: "\(seconds / 60)분 후 재설정"
+            )
+        }
         if seconds < 86_400 {
             let hours = seconds / 3600
             let minutes = (seconds % 3600) / 60
-            return minutes > 0 ? "\(hours) 小时 \(minutes) 分后重置" : "\(hours) 小时后重置"
+            return minutes > 0
+                ? localized(
+                    en: "Resets in \(hours) h \(minutes) min",
+                    zh: "\(hours) 小时 \(minutes) 分后重置",
+                    ja: "\(hours) 時間 \(minutes) 分後にリセット",
+                    ko: "\(hours)시간 \(minutes)분 후 재설정"
+                )
+                : localized(
+                    en: "Resets in \(hours) h",
+                    zh: "\(hours) 小时后重置",
+                    ja: "\(hours) 時間後にリセット",
+                    ko: "\(hours)시간 후 재설정"
+                )
         }
         let days = seconds / 86_400
         let hours = (seconds % 86_400) / 3600
-        return hours > 0 ? "\(days) 天 \(hours) 小时后重置" : "\(days) 天后重置"
+        return hours > 0
+            ? localized(
+                en: "Resets in \(days) d \(hours) h",
+                zh: "\(days) 天 \(hours) 小时后重置",
+                ja: "\(days) 日 \(hours) 時間後にリセット",
+                ko: "\(days)일 \(hours)시간 후 재설정"
+            )
+            : localized(
+                en: "Resets in \(days) d",
+                zh: "\(days) 天后重置",
+                ja: "\(days) 日後にリセット",
+                ko: "\(days)일 후 재설정"
+            )
     }
 
     private func openURL(_ string: String) {
@@ -748,6 +842,8 @@ private struct ClaudeQuotaProgressBar: View {
     let remainingPercent: Double
     let expectedRemainingPercent: Double?
     let tint: Color
+
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         GeometryReader { geometry in
@@ -770,7 +866,13 @@ private struct ClaudeQuotaProgressBar: View {
             }
         }
         .frame(height: 5)
-        .accessibilityLabel("剩余额度")
+        .accessibilityLabel(LocalizedString.l(
+            settings.language,
+            en: "Remaining quota",
+            zh: "剩余额度",
+            ja: "残りクォータ",
+            ko: "남은 할당량"
+        ))
         .accessibilityValue("\(Int(remainingPercent.rounded()))%")
     }
 }

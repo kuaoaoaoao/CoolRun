@@ -14,12 +14,19 @@ enum PluginPermission: String, CaseIterable, Sendable {
     /// 读写插件自己的 data.json
     case storage
 
+    /// 权限标签，显示在插件卡片上。这里直接读当前语言——它只被设置页的
+    /// `Text(...)` 用，调用点没有语言参数可传。
     var displayName: String {
+        let lang = AppSettings.shared.language
         switch self {
-        case .network: return "联网"
-        case .notify: return "通知"
-        case .clipboard: return "剪贴板"
-        case .storage: return "本地存储"
+        case .network:
+            return LocalizedString.l(lang, en: "Network", zh: "联网", ja: "ネットワーク", ko: "네트워크")
+        case .notify:
+            return LocalizedString.l(lang, en: "Notifications", zh: "通知", ja: "通知", ko: "알림")
+        case .clipboard:
+            return LocalizedString.l(lang, en: "Clipboard", zh: "剪贴板", ja: "クリップボード", ko: "클립보드")
+        case .storage:
+            return LocalizedString.l(lang, en: "Local storage", zh: "本地存储", ja: "ローカル保存", ko: "로컬 저장소")
         }
     }
 }

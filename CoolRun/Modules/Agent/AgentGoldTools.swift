@@ -264,20 +264,21 @@ enum AgentGoldTools {
             let list = dailyRecords(quality.closes)
             let prices = quality.closes.map(\.close)
             let snapshot = TechnicalIndicators.buildSnapshot(prices: prices, currentPrice: price)
-            let signal = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot)
+            let signal = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot, lang: AppSettings.shared.language)
             guard let report = GoldAdvancedStrategy.analyze(
                 records: list,
                 snapshot: snapshot,
-                signal: signal
+                signal: signal,
+                lang: AppSettings.shared.language
             ) else {
                 return .failure("策略引擎没有产出结果，可能是数据窗口内波动异常。")
             }
 
             var payload: [String: JSONValue] = [
-                "regime": .string(report.regime.regime.displayName),
+                "regime": .string(report.regime.regime.displayName(lang: AppSettings.shared.language)),
                 "trend_score": num(report.regime.trendScore, digits: 3),
                 "ranging_score": num(report.regime.rangingScore, digits: 3),
-                "volatility_regime": .string(report.regime.volatilityRegime.displayName),
+                "volatility_regime": .string(report.regime.volatilityRegime.displayName(lang: AppSettings.shared.language)),
                 "hurst_exponent": num(report.regime.hurstExponent, digits: 3),
                 "adx": num(report.regime.adx),
                 "technical_opportunity": num(report.technicalOpportunity, digits: 3),
@@ -356,8 +357,8 @@ enum AgentGoldTools {
             }
             let list = dailyRecords(quality.closes)
             let snapshot = TechnicalIndicators.buildSnapshot(prices: prices, currentPrice: price)
-            let signal = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot)
-            let report = GoldAdvancedStrategy.analyze(records: list, snapshot: snapshot, signal: signal)
+            let signal = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot, lang: AppSettings.shared.language)
+            let report = GoldAdvancedStrategy.analyze(records: list, snapshot: snapshot, signal: signal, lang: AppSettings.shared.language)
 
             guard let plan = GoldActionPlanner.plan(
                 currentPrice: price,
@@ -428,9 +429,9 @@ enum AgentGoldTools {
                 let list = dailyRecords(quality.closes)
                 let prices = quality.closes.map(\.close)
                 let snapshot = TechnicalIndicators.buildSnapshot(prices: prices, currentPrice: price)
-                let generated = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot)
+                let generated = TradingSignalEngine.generateSignal(prices: prices, currentPrice: price, snapshot: snapshot, lang: AppSettings.shared.language)
                 signal = generated
-                report = GoldAdvancedStrategy.analyze(records: list, snapshot: snapshot, signal: generated)
+                report = GoldAdvancedStrategy.analyze(records: list, snapshot: snapshot, signal: generated, lang: AppSettings.shared.language)
             }
 
             guard let advice = GoldPositionAdvisor.analyze(
@@ -438,7 +439,8 @@ enum AgentGoldTools {
                 grams: summary.grams,
                 averageCost: summary.averageCost,
                 report: report,
-                signal: signal
+                signal: signal,
+                lang: AppSettings.shared.language
             ) else {
                 return .failure("持仓数据不完整，算不出建议。")
             }

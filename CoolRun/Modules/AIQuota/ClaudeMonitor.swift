@@ -59,10 +59,16 @@ final class ClaudeMonitorViewModel {
         refreshTask = nil
     }
 
+    /// 后台轮询入口（无视图上下文）：沿用当前界面语言。
     func refresh() async {
+        await refresh(lang: AppSettings.shared.language)
+    }
+
+    /// 视图入口：由视图把当前语言传进来。
+    func refresh(lang: AppLanguage) async {
         guard !isRefreshing else { return }
         isRefreshing = true
-        state = await ClaudeMonitorClient.fetch()
+        state = await ClaudeMonitorClient.fetch(lang: lang)
         isRefreshing = false
         if case let .ready(snapshot) = state {
             QuotaAlertManager.shared.handle(
@@ -82,9 +88,9 @@ nonisolated enum ClaudeMonitorClient {
     private static let betaHeader = "oauth-2025-04-20"
     private static let userAgent = "claude-code/2.1.0"
 
-    static func fetch() async -> ClaudeMonitorState {
+    static func fetch(lang: AppLanguage) async -> ClaudeMonitorState {
         let credentials: ClaudeCredentials
-        switch loadCredentials() {
+        switch loadCredentials(lang: lang) {
         case let .success(value):
             credentials = value
         case let .failure(reason):
@@ -93,7 +99,15 @@ nonisolated enum ClaudeMonitorClient {
 
         if let expiresAt = credentials.expiresAt, expiresAt < Date() {
             // 不主动刷新 token：refresh token 是轮换的，抢刷会破坏 CLI 的登录态
-            return .notLoggedIn("Claude 登录已过期，请在终端运行 claude 后重试")
+            return .notLoggedIn(
+                LocalizedString.l(
+                    lang,
+                    en: "Claude sign-in expired. Run claude in Terminal and try again",
+                    zh: "Claude 登录已过期，请在终端运行 claude 后重试",
+                    ja: "Claude のログインが期限切れです。ターミナルで claude を実行して再試行してください",
+                    ko: "Claude 로그인이 만료되었습니다. 터미널에서 claude를 실행한 뒤 다시 시도하세요"
+                )
+            )
         }
 
         do {
@@ -101,7 +115,7 @@ nonisolated enum ClaudeMonitorClient {
             let snapshot = ClaudeMonitorSnapshot(
                 account: credentials.account,
                 plan: credentials.plan,
-                windows: makeWindows(from: response),
+                windows: makeWindows(from: response, lang: lang),
                 extraUsage: response.extraUsage.flatMap { extra in
                     guard extra.isEnabled == true, let used = extra.usedCredits, let limit = extra.monthlyLimit else { return nil }
                     return ClaudeExtraUsage(usedCredits: used, monthlyLimit: limit, currency: extra.currency)
@@ -112,11 +126,35 @@ nonisolated enum ClaudeMonitorClient {
         } catch let error as UsageError {
             switch error {
             case .unauthorized:
-                return .notLoggedIn("凭据已失效，请在终端运行 claude 重新登录")
+                return .notLoggedIn(
+                    LocalizedString.l(
+                        lang,
+                        en: "Credentials are no longer valid. Run claude in Terminal to sign in again",
+                        zh: "凭据已失效，请在终端运行 claude 重新登录",
+                        ja: "認証情報が無効です。ターミナルで claude を実行して再ログインしてください",
+                        ko: "자격 증명이 만료되었습니다. 터미널에서 claude를 실행해 다시 로그인하세요"
+                    )
+                )
             case .rateLimited:
-                return .unavailable("usage 接口被限频，稍后自动重试")
+                return .unavailable(
+                    LocalizedString.l(
+                        lang,
+                        en: "Usage API is rate limited, retrying automatically later",
+                        zh: "usage 接口被限频，稍后自动重试",
+                        ja: "usage API がレート制限中です。後ほど自動で再試行します",
+                        ko: "usage API가 속도 제한 중입니다. 잠시 후 자동으로 재시도합니다"
+                    )
+                )
             case let .server(code):
-                return .unavailable("Claude 接口错误：HTTP \(code)")
+                return .unavailable(
+                    LocalizedString.l(
+                        lang,
+                        en: "Claude API error: HTTP \(code)",
+                        zh: "Claude 接口错误：HTTP \(code)",
+                        ja: "Claude API エラー：HTTP \(code)",
+                        ko: "Claude API 오류: HTTP \(code)"
+                    )
+                )
             }
         } catch {
             return .unavailable(error.localizedDescription)
@@ -137,7 +175,7 @@ nonisolated enum ClaudeMonitorClient {
         case failure(String)
     }
 
-    static func loadCredentials() -> CredentialResult {
+    static func loadCredentials(lang: AppLanguage) -> CredentialResult {
         let home = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) }
             ?? FileManager.default.homeDirectoryForCurrentUser.path
         let fileURL = URL(fileURLWithPath: home).appendingPathComponent(".claude/.credentials.json")
@@ -146,7 +184,15 @@ nonisolated enum ClaudeMonitorClient {
         if let data = try? Data(contentsOf: fileURL), let credentials = parseCredentials(data) {
             return .success(credentials)
         }
-        return .failure("未找到 Claude Code 登录凭据，请在终端运行 claude 登录")
+        return .failure(
+            LocalizedString.l(
+                lang,
+                en: "No Claude Code credentials found. Run claude in Terminal to sign in",
+                zh: "未找到 Claude Code 登录凭据，请在终端运行 claude 登录",
+                ja: "Claude Code の認証情報が見つかりません。ターミナルで claude にログインしてください",
+                ko: "Claude Code 자격 증명을 찾을 수 없습니다. 터미널에서 claude로 로그인하세요"
+            )
+        )
     }
 
     private static func parseCredentials(_ data: Data) -> ClaudeCredentials? {
@@ -199,12 +245,32 @@ nonisolated enum ClaudeMonitorClient {
         }
     }
 
-    private static func makeWindows(from response: UsageResponse) -> [CodexQuotaWindow] {
+    private static func makeWindows(from response: UsageResponse, lang: AppLanguage) -> [CodexQuotaWindow] {
         let candidates: [(id: String, title: String, minutes: Int, window: UsageResponse.Window?)] = [
-            ("claude-5h", "5 小时额度", 300, response.fiveHour),
-            ("claude-7d", "周额度", 10080, response.sevenDay),
-            ("claude-7d-opus", "Opus 周额度", 10080, response.sevenDayOpus),
-            ("claude-7d-sonnet", "Sonnet 周额度", 10080, response.sevenDaySonnet),
+            (
+                "claude-5h",
+                LocalizedString.l(lang, en: "5-hour quota", zh: "5 小时额度", ja: "5時間クォータ", ko: "5시간 할당량"),
+                300,
+                response.fiveHour
+            ),
+            (
+                "claude-7d",
+                LocalizedString.l(lang, en: "Weekly quota", zh: "周额度", ja: "週次クォータ", ko: "주간 할당량"),
+                10080,
+                response.sevenDay
+            ),
+            (
+                "claude-7d-opus",
+                LocalizedString.l(lang, en: "Opus weekly quota", zh: "Opus 周额度", ja: "Opus 週次クォータ", ko: "Opus 주간 할당량"),
+                10080,
+                response.sevenDayOpus
+            ),
+            (
+                "claude-7d-sonnet",
+                LocalizedString.l(lang, en: "Sonnet weekly quota", zh: "Sonnet 周额度", ja: "Sonnet 週次クォータ", ko: "Sonnet 주간 할당량"),
+                10080,
+                response.sevenDaySonnet
+            ),
         ]
         return candidates.compactMap { candidate in
             guard let window = candidate.window, let utilization = window.utilization else { return nil }

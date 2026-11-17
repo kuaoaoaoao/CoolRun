@@ -53,13 +53,16 @@ final class CountdownModelTests: XCTestCase {
 
     func testDateStringFormatsSolarAndLunar() {
         let solar = CountdownEvent(name: "a", month: 3, day: 8)
-        XCTAssertEqual(solar.dateString, "3月8日")
+        XCTAssertEqual(solar.dateString(lang: .chinese), "3月8日")
+        XCTAssertEqual(solar.dateString(lang: .english), "3/8")
 
         let lunar = CountdownEvent(name: "b", isLunar: true, month: 2, day: 8, isLeapMonth: true)
-        XCTAssertEqual(lunar.dateString, "闰二月初八")
+        XCTAssertEqual(lunar.dateString(lang: .chinese), "闰二月初八")
 
         let oneTime = CountdownEvent(name: "c", month: 6, day: 7, repeatsAnnually: false, targetYear: 2027)
-        XCTAssertEqual(oneTime.dateString, "2027年6月7日")
+        XCTAssertEqual(oneTime.dateString(lang: .chinese), "2027年6月7日")
+        XCTAssertEqual(oneTime.dateString(lang: .japanese), "2027年6月7日")
+        XCTAssertEqual(oneTime.dateString(lang: .korean), "2027년 6월 7일")
     }
 
     func testOccursOnMatchesRepeatingAndOneTimeSolarEvents() throws {

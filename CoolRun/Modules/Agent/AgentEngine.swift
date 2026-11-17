@@ -50,12 +50,40 @@ enum AgentWireProtocol: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    nonisolated var subtitle: String {
+    nonisolated func subtitle(_ lang: AppLanguage) -> String {
         switch self {
-        case .openAIChat: return "chat/completions · 兼容性最好"
-        case .openAIResponses: return "responses · 新接口"
-        case .anthropicMessages: return "messages · Claude"
-        case .ollama: return "本地模型 · 无需 API Key"
+        case .openAIChat:
+            return LocalizedString.l(
+                lang,
+                en: "chat/completions · most compatible",
+                zh: "chat/completions · 兼容性最好",
+                ja: "chat/completions · 互換性が最も高い",
+                ko: "chat/completions · 호환성 최고"
+            )
+        case .openAIResponses:
+            return LocalizedString.l(
+                lang,
+                en: "responses · newer API",
+                zh: "responses · 新接口",
+                ja: "responses · 新しい API",
+                ko: "responses · 새로운 API"
+            )
+        case .anthropicMessages:
+            return LocalizedString.l(
+                lang,
+                en: "messages · Claude",
+                zh: "messages · Claude",
+                ja: "messages · Claude",
+                ko: "messages · Claude"
+            )
+        case .ollama:
+            return LocalizedString.l(
+                lang,
+                en: "Local models · no API key needed",
+                zh: "本地模型 · 无需 API Key",
+                ja: "ローカルモデル · API キー不要",
+                ko: "로컬 모델 · API 키 불필요"
+            )
         }
     }
 
@@ -92,6 +120,8 @@ struct AgentRunConfig: Sendable {
     var maxTokens: Int
     /// 一次用户输入内最多允许的「模型→工具→模型」往返次数，防止死循环。
     var maxRounds: Int
+    /// 界面语言。wire 层是 nonisolated 的，错误文案要靠它取语言。
+    var lang: AppLanguage
 
     nonisolated init(
         protocolKind: AgentWireProtocol = .openAIChat,
@@ -100,7 +130,8 @@ struct AgentRunConfig: Sendable {
         model: String = "",
         temperature: Double = 0.6,
         maxTokens: Int = 4096,
-        maxRounds: Int = 6
+        maxRounds: Int = 6,
+        lang: AppLanguage = .chinese
     ) {
         self.protocolKind = protocolKind
         self.apiKey = apiKey
@@ -109,6 +140,7 @@ struct AgentRunConfig: Sendable {
         self.temperature = temperature
         self.maxTokens = maxTokens
         self.maxRounds = maxRounds
+        self.lang = lang
     }
 }
 
@@ -128,7 +160,13 @@ enum AgentEvent: Sendable {
 
 // MARK: - 错误
 
-enum AgentError: Error, LocalizedError {
+/// 能按界面语言给出文案的错误。界面层统一用 `localizedMessage(_:)` 取文案，
+/// `localizedDescription` 只作为兜底（固定中文）。
+protocol AgentLocalizedError: Error {
+    nonisolated func localizedMessage(_ lang: AppLanguage) -> String
+}
+
+enum AgentError: Error, LocalizedError, AgentLocalizedError {
     case notConfigured
     case missingCredentials(String)
     case invalidEndpoint(String)
@@ -138,24 +176,71 @@ enum AgentError: Error, LocalizedError {
     case maxRoundsExceeded(Int)
     case toolFailed(name: String, message: String)
 
-    var errorDescription: String? {
+    nonisolated var errorDescription: String? {
+        localizedMessage(.chinese)
+    }
+
+    /// 本地化的错误文案。`errorDescription` 只是兜底，界面请用这个。
+    nonisolated func localizedMessage(_ lang: AppLanguage) -> String {
         switch self {
         case .notConfigured:
-            return "Agent 未配置：请先在设置里选择模型接入方式。"
+            return LocalizedString.l(
+                lang,
+                en: "Agent isn't configured yet. Pick a model provider in Settings first.",
+                zh: "Agent 未配置：请先在设置里选择模型接入方式。",
+                ja: "Agent が未設定です。先に設定でモデルの接続方法を選んでください。",
+                ko: "Agent가 아직 설정되지 않았습니다. 먼저 설정에서 모델 연결 방식을 선택하세요."
+            )
         case .missingCredentials(let detail):
             return detail
         case .invalidEndpoint(let detail):
-            return "接口地址无效：\(detail)"
+            return LocalizedString.l(
+                lang,
+                en: "Invalid endpoint: \(detail)",
+                zh: "接口地址无效：\(detail)",
+                ja: "エンドポイントが無効です：\(detail)",
+                ko: "엔드포인트가 올바르지 않습니다: \(detail)"
+            )
         case .http(let status, let message):
-            return "请求失败（\(status)）：\(message)"
+            return LocalizedString.l(
+                lang,
+                en: "Request failed (\(status)): \(message)",
+                zh: "请求失败（\(status)）：\(message)",
+                ja: "リクエスト失敗（\(status)）：\(message)",
+                ko: "요청 실패(\(status)): \(message)"
+            )
         case .invalidResponse(let detail):
-            return "响应格式异常：\(detail)"
+            return LocalizedString.l(
+                lang,
+                en: "Unexpected response format: \(detail)",
+                zh: "响应格式异常：\(detail)",
+                ja: "応答の形式が不正です：\(detail)",
+                ko: "응답 형식이 올바르지 않습니다: \(detail)"
+            )
         case .cancelled:
-            return "已取消。"
+            return LocalizedString.l(
+                lang,
+                en: "Cancelled.",
+                zh: "已取消。",
+                ja: "キャンセルしました。",
+                ko: "취소되었습니다."
+            )
         case .maxRoundsExceeded(let rounds):
-            return "工具调用超过 \(rounds) 轮上限，已停止。请把问题拆小一点。"
+            return LocalizedString.l(
+                lang,
+                en: "Stopped after hitting the \(rounds)-round tool call limit. Try splitting the question into smaller parts.",
+                zh: "工具调用超过 \(rounds) 轮上限，已停止。请把问题拆小一点。",
+                ja: "ツール呼び出しが \(rounds) 回の上限を超えたため停止しました。質問を小さく分けてください。",
+                ko: "도구 호출이 \(rounds)회 한도를 넘어 중지했습니다. 질문을 더 작게 나눠 주세요."
+            )
         case .toolFailed(let name, let message):
-            return "工具 \(name) 执行失败：\(message)"
+            return LocalizedString.l(
+                lang,
+                en: "Tool \(name) failed: \(message)",
+                zh: "工具 \(name) 执行失败：\(message)",
+                ja: "ツール \(name) の実行に失敗しました：\(message)",
+                ko: "도구 \(name) 실행 실패: \(message)"
+            )
         }
     }
 }
