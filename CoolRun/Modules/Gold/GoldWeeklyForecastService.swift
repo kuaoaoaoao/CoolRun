@@ -9,7 +9,7 @@ struct GoldWeeklyForecastRequest: Sendable {
     let now: Date
 }
 
-protocol GoldWeeklyForecastProviding: Sendable {
+nonisolated protocol GoldWeeklyForecastProviding: Sendable {
     func fetchSnapshot(
         request: GoldWeeklyForecastRequest,
         language: AppLanguage

@@ -60,7 +60,9 @@ struct GoldMultiSourcePrice: Identifiable, Equatable, Sendable {
 // MARK: - 周预测历史窄协议
 
 /// 周预测只依赖这一个历史接口；请求 URL、period 和缓存时长与走势图共用。
-protocol GoldWeeklyHistoryProviding: Sendable {
+/// 网络取历史价，不是 UI 能力：标 `nonisolated`，否则 `actor` 实现无法满足
+/// @MainActor 隔离的方法要求（`-default-isolation MainActor` 下协议默认被隔离）。
+nonisolated protocol GoldWeeklyHistoryProviding: Sendable {
     func fetchHistoryPrices(
         range: GoldHistoryRange,
         now: Date

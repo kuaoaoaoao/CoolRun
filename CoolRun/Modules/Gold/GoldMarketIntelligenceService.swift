@@ -5,15 +5,15 @@ import Foundation
 // 窄协议：只暴露统一宏观编排所需的最小接口，
 // 不包含 UI、AppSettings 或 ViewModel。
 
-protocol GoldMarketContextProviding: Sendable {
+nonisolated protocol GoldMarketContextProviding: Sendable {
     func fetchContext(now: Date, language: AppLanguage) async throws -> GoldMarketContext
 }
 
-protocol GoldGlobalMarketProviding: Sendable {
+nonisolated protocol GoldGlobalMarketProviding: Sendable {
     func fetchSnapshot(now: Date) async throws -> GoldGlobalSnapshot
 }
 
-protocol GoldMarketIntelligenceProviding: Sendable {
+nonisolated protocol GoldMarketIntelligenceProviding: Sendable {
     func fetchSnapshot(
         now: Date,
         language: AppLanguage

@@ -62,8 +62,16 @@ fi
 
 # --- 2. 解包 --------------------------------------------------------------
 
+# 解包结果按版本缓存。只判断「文件存在」是不够的：升了版本之后会复用上一次
+# 解出来的旧二进制，打出来的「完整版」看起来是新版、跑的是旧版。
+CACHED_VERSION=$(cat "$CACHE/version.txt" 2>/dev/null || true)
+if [ "$CACHED_VERSION" != "$VERSION" ]; then
+  rm -rf "$CACHE/unpacked" "$CACHE"/deepseek-harness-sdk-runtime*
+fi
+
 if [ ! -x "$CACHE/deepseek-harness-sdk-runtime" ]; then
   echo "📦 解包…"
+  rm -rf "$CACHE/unpacked"
   unzip -oq "$WHEEL" -d "$CACHE/unpacked"
   # wheel 里的文件名带平台后缀，例如 deepseek-harness-sdk-runtime-macos-arm64，
   # 而 app 里认的是无后缀的 deepseek-harness-sdk-runtime，所以要挑出主程序改名。
@@ -83,6 +91,7 @@ if [ ! -x "$CACHE/deepseek-harness-sdk-runtime" ]; then
     esac
   done
   chmod +x "$CACHE"/deepseek-harness-sdk-runtime*
+  printf '%s\n' "$VERSION" > "$CACHE/version.txt"
 fi
 
 if [ ! -x "$CACHE/deepseek-harness-sdk-runtime" ]; then
@@ -99,9 +108,20 @@ mkdir -p "$DEST"
 cp "$CACHE"/deepseek-harness-sdk-runtime* "$DEST/"
 chmod +x "$DEST"/deepseek-harness-sdk-runtime*
 
+# 版本号写进 app：设置页读同目录的 version.txt 显示引擎版本，
+# 不写这里「完整版」会显示「版本未知」。
+printf '%s\n' "$VERSION" > "$DEST/version.txt"
+
 echo "🔏 重新做 ad-hoc 签名"
 codesign --force --deep --sign - "$APP_PATH" 2>/dev/null || \
   echo "⚠️  签名失败（不影响本地运行，但分发前需要处理）"
 
+# 冒烟测试：真的能跑起来才算数。重新签名（--deep）之后二进制跑不动的情况
+# 是真实发生过的，那种包装上去只会显示「引擎不可用」，看不出原因。
+if ! "$DEST/deepseek-harness-sdk-runtime" --help >/dev/null 2>&1; then
+  echo "❌ 内置运行时跑不起来（签名或权限有问题）"
+  exit 1
+fi
+
 SIZE=$(du -sh "$DEST" | cut -f1)
-echo "✅ 完整版就绪，运行时占用 $SIZE"
+echo "✅ 完整版就绪：运行时 ${VERSION}，占用 ${SIZE}"

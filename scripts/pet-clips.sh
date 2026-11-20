@@ -117,7 +117,7 @@ for row in "${CLIPS[@]}"; do
     src="$SRC/$zh.webm"
     dst="$OUT/$key.mov"
     if [ ! -f "$src" ]; then
-        echo "跳过 $key：缺 $zh.webm" >&2
+        echo "跳过 ${key}：缺 ${zh}.webm" >&2
         continue
     fi
     if [ "$FORCE" -eq 0 ] && [ -f "$dst" ] && [ "$dst" -nt "$src" ]; then

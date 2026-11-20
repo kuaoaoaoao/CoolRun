@@ -43,6 +43,9 @@ struct CoolRunApp: App {
     init() {
         CloudSyncStore.shared.start()
         CloudSyncStore.shared.pushBirthdaysFromLocalDefaults()
+        // 记下当前是轻量版还是完整版。设置页是直接查 bundle 的，这里写进
+        // UserDefaults 是给诊断上报用的 —— 之前这个方法写了却没人调用。
+        CoolRunEdition.recordCurrent()
         LocalReminderCenter.shared.start()
         AgentTools.registerAll()
         PluginManager.shared.loadAll()
