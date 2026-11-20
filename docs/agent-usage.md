@@ -309,7 +309,7 @@ let request = VNGenerateForegroundInstanceMaskRequest()
 
 - **一直弹钥匙串授权**：已经在 v4.3 改成 AES-GCM 本地加密文件，不再用钥匙串。如果你还看到弹窗，说明跑的是旧包。
 - **模型不调工具，只输出 JSON 文本**：模型太弱，换 7B 以上的。
-- **DSH 引擎起不来**：设置里看运行时状态；缺的话点下载。日志在 `~/Library/Application Support/CoolRun/agent-home/`。
+- **DSH 引擎起不来**：设置里看运行时状态那一行 —— 它会写明现在生效的是「内置 / 已下载 / 系统 PATH」哪一份、版本是多少。完整版已内置，不需要下载；轻量版点一次下载（约 90 MB，装完占盘约 170 MB）即可。如果你下载了新版本但状态还显示内置的旧版本，是内置优先，打开「优先使用已下载的运行时」就会切换。日志在 `~/Library/Application Support/CoolRun/agent-home/`。
 - **快捷键没反应**：可能被别的 app 占了，换一个或者用菜单栏图标。
 
 ### 金价分析

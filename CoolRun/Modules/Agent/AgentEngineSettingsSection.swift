@@ -44,6 +44,31 @@ struct AgentEngineSettingsSection: View {
                 Spacer()
             }
 
+            if let note = runtimeNote {
+                Text(note)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if showsPriorityToggle {
+                Toggle(isOn: Binding(
+                    get: { locator.preferDownloaded },
+                    set: { locator.setPreferDownloaded($0) }
+                )) {
+                    Text(LocalizedString.l(
+                        lang,
+                        en: "Prefer the downloaded runtime",
+                        zh: "优先使用已下载的运行时",
+                        ja: "ダウンロードしたランタイムを優先",
+                        ko: "다운로드한 런타임 우선"
+                    ))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .font(.system(size: 10))
+            }
+
             switch installer.state {
             case .downloading(let progress):
                 ProgressView(value: progress)
@@ -83,7 +108,25 @@ struct AgentEngineSettingsSection: View {
                     .controlSize(.small)
                 }
 
-                if locator.runtime != nil, locator.runtime?.source == .downloaded {
+                // 完整版已经有内置的了，这里的下载只作为「试新版」的入口，
+                // 所以不做成主按钮，也别让人以为不下载就用不了。
+                if CoolRunEdition.current == .full,
+                   locator.shadowed == nil,
+                   locator.runtime?.source == .bundled,
+                   !installer.state.isBusy {
+                    Button(LocalizedString.l(
+                        lang,
+                        en: "Download a local copy",
+                        zh: "下载本地副本",
+                        ja: "ローカルコピーをダウンロード",
+                        ko: "로컬 사본 다운로드"
+                    )) {
+                        Task { await installer.install(); locator.refresh() }
+                    }
+                    .controlSize(.small)
+                }
+
+                if locator.shadowed?.source == .downloaded || locator.runtime?.source == .downloaded {
                     Button(LocalizedString.l(lang, en: "Remove", zh: "移除", ja: "削除", ko: "제거")) {
                         installer.uninstall()
                         locator.refresh()
@@ -100,6 +143,70 @@ struct AgentEngineSettingsSection: View {
         }
         .padding(10)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// 只在「内置的正在生效、同时又存在一份下载的副本」时才有意义：
+    /// 其它情况要么没有第二份可选，要么已经在用下载的那份了。
+    private var showsPriorityToggle: Bool {
+        guard CoolRunEdition.current == .full, locator.shadowed?.source == .downloaded else { return false }
+        return true
+    }
+
+    /// 把「哪一份在生效、为什么」说清楚。完整版最容易在这里误会：
+    /// 内置的永远赢过下载的（除非打开开关），不说清楚就会以为下载失败。
+    private var runtimeNote: String? {
+        switch (locator.runtime?.source, locator.shadowed?.source) {
+        case (nil, _):
+            return CoolRunEdition.current == .full
+                ? LocalizedString.l(
+                    lang,
+                    en: "This build should include the runtime but it is missing. Reinstall CoolRun from the full installer.",
+                    zh: "这个版本本应内置运行时，但没找到。请用完整版安装包重新安装。",
+                    ja: "このビルドにはランタイムが含まれているはずですが見つかりません。フル版のインストーラで再インストールしてください。",
+                    ko: "이 빌드에는 런타임이 포함되어야 하는데 찾을 수 없습니다. 전체 버전 설치 파일로 다시 설치하세요."
+                )
+                : LocalizedString.l(
+                    lang,
+                    en: "The lite build does not bundle the runtime; download it once (about 90 MB, ~170 MB on disk) to use this engine offline.",
+                    zh: "轻量版没有内置运行时，下载一次（约 90 MB，装完占盘约 170 MB）之后就能离线用这个引擎。",
+                    ja: "ライト版にはランタイムが含まれていません。一度ダウンロード（約 90 MB、展開後は約 170 MB）すればオフラインで使えます。",
+                    ko: "라이트 빌드에는 런타임이 포함되어 있지 않습니다. 한 번 다운로드(약 90 MB, 설치 후 약 170 MB)하면 오프라인에서 사용할 수 있습니다."
+                )
+        case (.bundled, .some):
+            let version = locator.shadowed?.version ?? LocalizedString.l(lang, en: "unknown version", zh: "版本未知", ja: "バージョン不明", ko: "버전 알 수 없음")
+            return LocalizedString.l(
+                lang,
+                en: "A downloaded copy (\(version)) is being ignored: the bundled runtime takes priority. Turn on the switch below to use it.",
+                zh: "本地已下载 \(version)，但内置的优先，所以没有生效。打开下面的开关就会改用它。",
+                ja: "ローカルに \(version) をダウンロード済みですが、内蔵版が優先されるため使われていません。下のスイッチを入れると切り替わります。",
+                ko: "로컬에 \(version)을(를) 내려받았지만 내장 버전이 우선이라 사용되지 않습니다. 아래 스위치를 켜면 전환됩니다."
+            )
+        case (.bundled, nil):
+            let version = locator.runtime?.version ?? LocalizedString.l(lang, en: "unknown version", zh: "版本未知", ja: "バージョン不明", ko: "버전 알 수 없음")
+            return LocalizedString.l(
+                lang,
+                en: "Bundled with the app (\(version)) and updated together with it — nothing to download.",
+                zh: "随 App 内置（\(version)），跟着 App 一起更新，不需要额外下载。",
+                ja: "アプリに内蔵（\(version)）されており、アプリと一緒に更新されます。追加のダウンロードは不要です。",
+                ko: "앱에 내장(\(version))되어 앱과 함께 업데이트됩니다. 추가 다운로드가 필요 없습니다."
+            )
+        case (.downloaded, _):
+            return LocalizedString.l(
+                lang,
+                en: "Using the copy you downloaded to Application Support; it survives app updates.",
+                zh: "用的是下载到 Application Support 的那份，升级 App 不会覆盖它。",
+                ja: "Application Support にダウンロードしたコピーを使用中です。アプリを更新しても残ります。",
+                ko: "Application Support에 내려받은 사본을 사용 중입니다. 앱을 업데이트해도 유지됩니다."
+            )
+        case (.systemPath, _):
+            return LocalizedString.l(
+                lang,
+                en: "Using the dsh found on your PATH. Installing the bundled or downloaded runtime is recommended for normal use.",
+                zh: "用的是系统 PATH 里的 dsh。日常使用建议装内置或下载的运行时，那个不依赖你机器上装的 Node。",
+                ja: "PATH 上の dsh を使用中です。通常は内蔵版かダウンロード版の利用を推奨します（Node の有無に依存しないため）。",
+                ko: "PATH에 있는 dsh를 사용 중입니다. 일반적으로는 내장 또는 다운로드한 런타임 사용을 권장합니다(Node 설치 여부에 의존하지 않으므로)."
+            )
+        }
     }
 
     /// 两个引擎用的是同一套工具、同一套模型配置，区别只在「谁在跑」。

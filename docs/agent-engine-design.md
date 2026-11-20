@@ -28,7 +28,7 @@ CoolRun 现有 8.5 MB 的 dmg 是它最重要的产品资产之一；DSH 的单�
 |---|---|---|
 | DSH 单文件运行时可直接执行 | ✅ | `deepseek-harness-sdk-runtime-macos-arm64 --help` 正常输出 |
 | 运行时不需要系统 Node | ✅ | 内嵌 Node 24 SEA + 完整依赖树 |
-| 解压体积 | ⚠️ **297 MB** exe + 4.3 MB ripgrep + 49 KB spawn-helper | wheel 压缩后 86–90 MB |
+| 解压体积 | ⚠️ **297 MB** exe + 4.3 MB ripgrep + 49 KB spawn-helper（note: 本节数字都是实测 0.2.1rc2；0.2.2rc2 已缩到 168 MB exe / 173 MB 解压，结论不变） | wheel 压缩后 86–90 MB |
 | JSON-RPC over stdio | ✅ | `initialize` 返回结构化错误、`shutdown` 返回 `{}`，通道正常 |
 | `--patch` 注入自定义 provider | ✅ | 注入 `dsh-llm-pi-ai`（openai-completions）成功，`--dump-config` 可见 |
 | `--patch` 注入 MCP client | ✅ | 注入 `dsh-mcp-client`（streamable-http）成功 |
@@ -732,16 +732,41 @@ turn/end completed → session.status idle
 ### 12.4 打包
 
 ```bash
-./scripts/create-dmg.sh --lite    # CoolRun-Lite.dmg   约 8.6 MB，原生引擎
-./scripts/create-dmg.sh --full    # CoolRun-Full.dmg   约 100 MB，内置 DSH 运行时
+./scripts/create-dmg.sh           # CoolRun-Lite.dmg   实测 28 MB，原生引擎
+./scripts/create-dmg.sh --full    # CoolRun-Full.dmg   实测 120 MB（内置运行时 0.2.2rc2）
 ```
 
 `--full` 会先跑 `scripts/prepare-agent-runtime.sh`：查 PyPI 最新版 → 下载 wheel →
-解包 → 只把 `deepseek-harness-sdk-runtime*` 三个文件放进
-`CoolRun.app/Contents/Resources/AgentRuntime/` → ad-hoc 重签名。
+解包 → 只把 `deepseek-harness-sdk-runtime*` 三个文件 ＋ 一个 `version.txt` 放进
+`CoolRun.app/Contents/Resources/AgentRuntime/` → ad-hoc 重签名 → 冒烟。
+
+三个容易踩的点（2026-11 都修过）：
+
+1. **解包结果必须按版本缓存**。原来只判断「缓存里有没有那个名字的文件」，升版本后
+   会复用它，打出来的包写的是新版本、跑的是上一版的二进制。现在比对
+   `$CACHE/version.txt`，不一致就删掉重新解。
+2. **`version.txt` 要写进 app**。设置页的版本号读的是运行时同目录的 `version.txt`，
+   和 `AgentRuntimeInstaller` 下载后的写法一致 —— 缺了它完整版显示「版本未知」。
+3. **签完名要跑一次 `--help`**。`codesign --deep` 之后二进制跑不起来是真实发生过
+   的情况，装到用户机器上只会显示「引擎不可用」。打包时就失败，别让用户当测速员。
 
 两个脚本都优先使用 `.build/DerivedData/Build/Products/Release/CoolRun.app`，找不到
 才回退到导出的时间戳目录 —— 否则很容易把旧包打进 dmg。
+
+#### 运行时以谁为准
+
+`AgentRuntimeLocator.resolve` 是纯函数（`CoolRunTests/RuntimePriorityTests` 覆盖）：
+
+| 情况 | 生效的 | 被遮蔽的（设置页会说出来） |
+| --- | --- | --- |
+| 完整版 + 有下载副本，默认 | 内置 | 已下载 |
+| 完整版 + 勾「优先使用已下载的」 | 已下载 | 内置 |
+| 轻量版 + 有下载副本 | 已下载 | — |
+| 只剩系统 PATH 里的 `dsh` | 系统 | — |
+
+默认内置优先是有意的：完整版靠它自包含，不该被用户目录里来路不明的旧二进制顶掉。
+但「下载了却没生效」是坏体验，所以设置页会明确显示「本地已下载 X，当前仍用内置的 Y」，
+并给一个开关把它提到前面 —— 这也是完整版不重打 dmg 就能试新版引擎的唯一途径。
 
 ### 12.5 已知限制
 

@@ -57,6 +57,16 @@ final class AgentRuntimeLocator {
 
     private(set) var runtime: Runtime?
 
+    /// 被优先级挡在后面、没有生效的那一个。设置页要能说清「你下载了但它没在用」,
+    /// 否则完整版里点「下载」看上去成功、实际毫无变化。
+    private(set) var shadowed: Runtime?
+
+    /// 用户是否点名要「已下载的」优先于「内置的」。
+    ///
+    /// 默认关：完整版靠内置运行时自包含，不该被用户目录里一份来路不明的旧二进制顶掉。
+    /// 但完整版也要有办法试新版引擎 —— 不重打 dmg 就只能靠这个开关。
+    private(set) var preferDownloaded = AgentRuntimeLocator.storedPreferDownloaded
+
     private init() {
         refresh()
     }
@@ -74,36 +84,75 @@ final class AgentRuntimeLocator {
         downloadedRoot.appendingPathComponent("deepseek-harness-sdk-runtime")
     }
 
-    func refresh() {
-        runtime = Self.locate()
+    nonisolated static let preferDownloadedKey = "agent.preferDownloadedRuntime"
+
+    nonisolated static var storedPreferDownloaded: Bool {
+        UserDefaults.standard.bool(forKey: preferDownloadedKey)
     }
 
-    nonisolated static func locate() -> Runtime? {
-        // 1. 内置
-        if let bundled = CoolRunEdition.bundledRuntimeExecutable {
-            return Runtime(
-                executable: bundled,
-                source: .bundled,
-                version: readVersion(in: bundled.deletingLastPathComponent())
-            )
-        }
+    func setPreferDownloaded(_ value: Bool) {
+        guard value != preferDownloaded else { return }
+        preferDownloaded = value
+        UserDefaults.standard.set(value, forKey: Self.preferDownloadedKey)
+        refresh()
+    }
 
-        // 2. 下载的
-        let downloaded = downloadedExecutable
-        if FileManager.default.isExecutableFile(atPath: downloaded.path) {
-            return Runtime(
-                executable: downloaded,
-                source: .downloaded,
-                version: readVersion(in: downloadedRoot)
-            )
-        }
+    func refresh() {
+        let resolved = Self.resolve(
+            bundled: Self.bundledRuntime(),
+            downloaded: Self.downloadedRuntime(),
+            system: Self.systemRuntime(),
+            preferDownloaded: preferDownloaded
+        )
+        runtime = resolved.active
+        shadowed = resolved.shadowed
+    }
 
-        // 3. 系统 PATH 里的 dsh
-        if let path = which("dsh") {
-            return Runtime(executable: URL(fileURLWithPath: path), source: .systemPath, version: nil)
+    /// 纯选择逻辑，不碰文件系统，便于单测。
+    ///
+    /// 默认顺序：内置 → 已下载 → 系统 PATH。勾了开关就改成 已下载 → 内置 → 系统 PATH。
+    nonisolated static func resolve(
+        bundled: Runtime?,
+        downloaded: Runtime?,
+        system: Runtime?,
+        preferDownloaded: Bool
+    ) -> (active: Runtime?, shadowed: Runtime?) {
+        if preferDownloaded, let downloaded {
+            return (downloaded, bundled)
         }
+        if let bundled {
+            return (bundled, downloaded)
+        }
+        if let downloaded {
+            return (downloaded, nil)
+        }
+        return (system, nil)
+    }
 
-        return nil
+    nonisolated static func bundledRuntime() -> Runtime? {
+        guard let executable = CoolRunEdition.bundledRuntimeExecutable else { return nil }
+        return Runtime(
+            executable: executable,
+            source: .bundled,
+            version: readVersion(in: executable.deletingLastPathComponent())
+        )
+    }
+
+    nonisolated static func downloadedRuntime() -> Runtime? {
+        let executable = downloadedExecutable
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else { return nil }
+        return Runtime(
+            executable: executable,
+            source: .downloaded,
+            version: readVersion(in: downloadedRoot)
+        )
+    }
+
+    /// 系统 PATH 里的 `dsh` 只认真正可执行的单文件 runtime，不认 npm 全局装的脚本入口 ——
+    /// 那个依赖系统 Node，菜单栏 app 不该假设有。
+    nonisolated static func systemRuntime() -> Runtime? {
+        guard let path = which("dsh") else { return nil }
+        return Runtime(executable: URL(fileURLWithPath: path), source: .systemPath, version: nil)
     }
 
     nonisolated static func readVersion(in directory: URL) -> String? {
