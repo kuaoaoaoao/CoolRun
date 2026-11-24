@@ -396,7 +396,22 @@ final class CleanupAdvisor {
     // MARK: - 工具
 
     nonisolated static func measure(_ url: URL) async -> UInt64 {
-        await Task.detached(priority: .utility) { measureSync(url) }.value
+        await runOffPool { measureSync(url) }
+    }
+
+    /// 在真正的后台线程上跑阻塞的文件系统遍历。
+    ///
+    /// 这里不能用 `Task.detached`：它仍然跑在 Swift 并发的协作线程池里，
+    /// 线程数等于核数，一次遍历几十万文件的同步 `open`/`getdirentries` 会把
+    /// 池里的线程占住，别的 async 任务只能排队等。用 GCD 队列才是真的离开。
+    nonisolated private static func runOffPool<T: Sendable>(
+        _ work: @escaping @Sendable () -> T
+    ) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: work())
+            }
+        }
     }
 
     nonisolated private static func measureSync(_ url: URL) -> UInt64 {
@@ -422,7 +437,7 @@ final class CleanupAdvisor {
     }
 
     nonisolated private static func largeFiles(in home: URL) async -> [Item] {
-        await Task.detached(priority: .utility) { largeFilesSync(in: home) }.value
+        await runOffPool { largeFilesSync(in: home) }
     }
 
     nonisolated private static func largeFilesSync(in home: URL) -> [Item] {

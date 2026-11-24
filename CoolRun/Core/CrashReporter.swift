@@ -30,12 +30,14 @@ final class CrashReporter {
 
     private init() {}
 
+    /// 日志文件保留上限。正常启动也会留下痕迹，攒到几百个之后这里全是噪音。
+    private nonisolated static let maxLogFiles = 50
+
     /// 初始化崩溃收集。应在 `applicationDidFinishLaunching` 中调用。
     func install() {
         // 检查上次是否异常退出
         checkLastCrash()
-        // 记录正常启动
-        recordEvent(type: "launch", reason: "App launched normally")
+        pruneOldLogs()
     }
 
     /// 记录一次非致命错误。
@@ -67,6 +69,17 @@ final class CrashReporter {
     }
 
     // MARK: - 内部
+
+    /// 只留最近 `maxLogFiles` 条。以前每次启动都写一条「App launched normally」，
+    /// 跑一年攒下三百多个 json，而目录叫 crashes —— 打开一看全是正常启动，反而
+    /// 盖住了真正的异常记录。
+    private func pruneOldLogs() {
+        let logs = crashLogs
+        guard logs.count > Self.maxLogFiles else { return }
+        for url in logs.dropFirst(Self.maxLogFiles) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
 
     private func checkLastCrash() {
         // 如果上次启动后没有正常退出记录，且距离上次启动超过 5 秒，

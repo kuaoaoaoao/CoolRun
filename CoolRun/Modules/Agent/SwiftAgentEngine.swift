@@ -138,6 +138,13 @@ final class SwiftAgentEngine: AgentEngine {
                 return
             }
 
+            // 多轮之间补一个空行。上一轮那句「我来读取各项状态。」和下一轮的
+            // 「## 体检报告」直接拼在一起会变成「我来读取各项状态。## 体检报告」，
+            // 流式显示和回看历史都是糊的。
+            if !assistantText.isEmpty {
+                continuation.yield(.textDelta("\n\n"))
+            }
+
             working.append(AgentMessage(role: .assistant, content: assistantText, toolCalls: effectiveCalls))
 
             for call in effectiveCalls {

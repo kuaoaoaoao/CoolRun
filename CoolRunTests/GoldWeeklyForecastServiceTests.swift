@@ -113,11 +113,20 @@ final class GoldWeeklyForecastServiceTests: XCTestCase {
     private actor HistoryProviderStub: GoldWeeklyHistoryProviding {
         private let points: [GoldRemotePricePoint]
         private let error: Error?
+        /// 取数耗时。内存 stub 默认瞬间返回，并发去重的测试就变成了时序赌博：
+        /// 第一次请求可能在第二次进来之前就跑完，inflight 已清空，于是各跑一次。
+        /// 需要验证去重时传一个几十毫秒的延迟，让两个请求真正重叠。
+        private let delay: Duration
         private(set) var callCount = 0
 
-        init(points: [GoldRemotePricePoint] = [], error: Error? = nil) {
+        init(
+            points: [GoldRemotePricePoint] = [],
+            error: Error? = nil,
+            delay: Duration = .zero
+        ) {
             self.points = points
             self.error = error
+            self.delay = delay
         }
 
         func fetchHistoryPrices(
@@ -125,6 +134,9 @@ final class GoldWeeklyForecastServiceTests: XCTestCase {
             now: Date
         ) async throws -> [GoldRemotePricePoint] {
             callCount += 1
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
             if let error { throw error }
             return points
         }
@@ -345,7 +357,8 @@ final class GoldWeeklyForecastServiceTests: XCTestCase {
 
     func testConcurrentRequestsShareSingleHistoryFetch() async {
         let stub = HistoryProviderStub(
-            points: makeHistoryPoints(count: 260, endingAt: now)
+            points: makeHistoryPoints(count: 260, endingAt: now),
+            delay: .milliseconds(60)
         )
         let service = makeService(history: stub, backtest: makePassingBacktest())
         async let first = service.fetchSnapshot(

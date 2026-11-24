@@ -2,7 +2,9 @@ import Foundation
 
 // MARK: - 请求与协议
 
-struct GoldWeeklyForecastRequest: Sendable {
+/// `nonisolated`：这是个纯数据请求，会被传进 `@Sendable` 的取数闭包。
+/// 默认隔离是 MainActor，不标的话从非隔离上下文读 `currentPrice` 会告警。
+nonisolated struct GoldWeeklyForecastRequest: Sendable {
     let currentPrice: Double
     let currentPriceSource: String
     let eventImpact: GoldEventImpact?

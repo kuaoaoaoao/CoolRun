@@ -62,6 +62,13 @@ enum AgentTools {
                 "network_upload": .string(bytes(snapshot.network.uploadSpeed) + "/s"),
                 "process_count": .number(Double(snapshot.processes.totalCount)),
                 "updated_at": .string(iso(snapshot.updatedAt)),
+                // macOS 的「已用内存」含文件缓存、压缩内存和内核占用，
+                // 天然大于「所有进程 phys_footprint 之和」。不写清楚，
+                // 模型会把这当成数据矛盾，白白浪费一轮去「质疑采样」。
+                "memory_note": .string(
+                    "memory_used 是 macOS 口径（含文件缓存、压缩内存、内核占用），"
+                        + "不等于所有进程占用之和，两者差得多是正常的。"
+                ),
             ]
             if let level = snapshot.battery.level {
                 payload["battery_level_percent"] = .number(percent(level))
@@ -102,9 +109,22 @@ enum AgentTools {
                     "instances": .number(Double(process.instanceCount)),
                 ])
             }
+            // 只给前 N 条时，模型很容易拿这几条相加当「全部占用」，
+            // 于是得出「内存前几名加起来才 1GB，和实际 36GB 对不上」这种
+            // 看似发现矛盾、其实是读不懂截断的结论。把总量和口径一起给出去。
+            let merged = snapshot.processes.processes
+            let memoryTotal = merged.reduce(UInt64(0)) { $0 + $1.memoryBytes }
             return .text(JSONValue.object([
                 "sort_by": .string(sortBy),
                 "total_process_count": .number(Double(snapshot.processes.totalCount)),
+                "shown": .number(Double(items.count)),
+                "all_processes_memory": .string(bytes(memoryTotal)),
+                "note": .string(
+                    "只列出前 \(limit) 个（合并后共 \(merged.count) 项，系统进程总数 "
+                        + "\(snapshot.processes.totalCount)）。全部进程内存合计 "
+                        + "\(bytes(memoryTotal))，比前几项相加大得多 —— "
+                        + "要判断内存占用请用这个合计值，不要拿前几项当总量。"
+                ),
                 "processes": .array(Array(items)),
             ]).prettyJSONString())
         }
@@ -136,6 +156,22 @@ enum AgentTools {
                 if let remaining = health.timeRemainingMinutes {
                     payload["time_remaining_minutes"] = .number(Double(remaining))
                 }
+            }
+            // 缺的字段把原因写出来。不写的话模型只能说「系统没返回」，
+            // 用户看到的就是一句没用的「未返回」。
+            var notes: [String] = []
+            if let health = snapshot.battery.health {
+                if health.healthPercent == nil {
+                    notes.append("health_percent 缺失：读不到设计容量，算不出健康度。")
+                }
+                if health.temperatureCelsius == nil {
+                    notes.append("temperature_celsius 缺失：这台机型不提供电池温度传感器（CPU 温度在 system_snapshot 的 temperature 里）。")
+                }
+            } else {
+                notes.append("没读到电池健康信息：这台机器可能没有内置电池。")
+            }
+            if !notes.isEmpty {
+                payload["note"] = .string(notes.joined(separator: " "))
             }
             return .text(JSONValue.object(payload).prettyJSONString())
         }
@@ -434,7 +470,10 @@ private enum SystemToolSupport {
     static let sampler = SystemSampler()
 
     static func snapshot(includeProcesses: Bool) async -> SystemSnapshot {
-        _ = sampler.sample(includeProcesses: false)
+        // 预热必须与正式采样带同样的 includeProcesses：整机 CPU 和进程 CPU
+        // 都是「两次采样求差」，只预热整机的话 ProcessSampler 的上一帧时间戳
+        // 还是空的，正式采样出来的进程 cpuUsage 会全是 0（排序随之失效）。
+        _ = sampler.sample(includeProcesses: includeProcesses, mergeProcesses: true)
         try? await Task.sleep(for: .milliseconds(320))
         return sampler.sample(includeProcesses: includeProcesses, mergeProcesses: true)
     }

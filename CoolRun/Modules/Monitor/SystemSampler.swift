@@ -234,11 +234,18 @@ final class SystemSampler {
             return nil
         }
 
+        // Apple Silicon 上顶层 MaxCapacity 恒为 100（百分比），真实 mAh 全在 BatteryData
+        // 子字典里：DesignCapacity / AppleRawMaxCapacity / NominalChargeCapacity 都只在那儿。
+        // 只看顶层会读不到设计容量，健康度就算不出来（Agent 回答「健康度未返回」就是这么来的）。
+        let batteryData = props["BatteryData"] as? [String: Any] ?? [:]
+        func capacity(_ key: String) -> Int? {
+            (props[key] as? Int) ?? (batteryData[key] as? Int)
+        }
+
         var health = BatteryHealthMetrics()
-        health.cycleCount = props["CycleCount"] as? Int
-        health.designCapacity = props["DesignCapacity"] as? Int
-        // Apple Silicon 上 MaxCapacity 恒为 100(%)，真实 mAh 在 AppleRawMaxCapacity/NominalChargeCapacity
-        health.maxCapacity = (props["AppleRawMaxCapacity"] as? Int) ?? (props["NominalChargeCapacity"] as? Int)
+        health.cycleCount = (props["CycleCount"] as? Int) ?? (batteryData["CycleCount"] as? Int)
+        health.designCapacity = capacity("DesignCapacity")
+        health.maxCapacity = capacity("AppleRawMaxCapacity") ?? capacity("NominalChargeCapacity")
 
         if let rawTemperature = props["Temperature"] as? Int {
             var celsius = Double(rawTemperature) / 100

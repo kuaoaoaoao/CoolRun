@@ -4,6 +4,7 @@ import SwiftUI
 // MARK: - Agent 对话视图
 
 struct AgentChatView: View {
+    @State private var showsClearConfirmation = false
     @State private var coordinator = AgentCoordinator.shared
     @State private var settings = AgentSettings.shared
     @ObservedObject private var appSettings = AppSettings.shared
@@ -124,17 +125,50 @@ struct AgentChatView: View {
             .help(LocalizedString.l(lang, en: "Agent settings", zh: "Agent 设置", ja: "Agent 設定", ko: "Agent 설정"))
 
             Button {
-                coordinator.reset()
+                showsClearConfirmation = true
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
             .help(LocalizedString.l(lang, en: "Clear chat", zh: "清空对话", ja: "会話をクリア", ko: "대화 지우기"))
-            .disabled(coordinator.isRunning)
+            .disabled(coordinator.isRunning || AgentHistoryStore.shared.isEmpty)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        // 这个按钮删的是全部历史（磁盘上的也删），不是只清屏。以前一点就没，
+        // 手滑点错就找不回来了 —— 所以先问一句。
+        .alert(
+            LocalizedString.l(
+                lang,
+                en: "Clear all conversations?",
+                zh: "清空全部对话记录？",
+                ja: "会話をすべて消しますか？",
+                ko: "모든 대화를 지울까요?"
+            ),
+            isPresented: $showsClearConfirmation
+        ) {
+            Button(
+                LocalizedString.l(lang, en: "Clear", zh: "清空", ja: "消去", ko: "지우기"),
+                role: .destructive
+            ) {
+                coordinator.reset()
+            }
+            Button(
+                LocalizedString.l(lang, en: "Cancel", zh: "取消", ja: "キャンセル", ko: "취소"),
+                role: .cancel
+            ) {}
+        } message: {
+            Text(
+                LocalizedString.l(
+                    lang,
+                    en: "Every saved message will be deleted. This cannot be undone.",
+                    zh: "会删掉所有已保存的消息，无法恢复。",
+                    ja: "保存されたメッセージがすべて削除され、元に戻せません。",
+                    ko: "저장된 메시지가 모두 삭제되며 되돌릴 수 없습니다."
+                )
+            )
+        }
     }
 
     // MARK: - 对话区
@@ -262,7 +296,7 @@ struct AgentChatView: View {
             }
 
             if !coordinator.streamingText.isEmpty {
-                Text(coordinator.streamingText)
+                Text(AgentMarkdown.render(coordinator.streamingText))
                     .font(.system(size: 12))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -459,7 +493,7 @@ struct AgentMessageBubble: View {
         HStack {
             if isUser { Spacer(minLength: 40) }
 
-            Text(message.content)
+            Text(AgentMarkdown.render(message.content))
                 .font(.system(size: 12))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
