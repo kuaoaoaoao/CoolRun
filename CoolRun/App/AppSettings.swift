@@ -59,6 +59,18 @@ class AppSettings: ObservableObject {
         didSet { userDefaults.set(showMenuBarCoinIcon, forKey: "menubar_show_coin_icon") }
     }
 
+    /// 统一搜索（⌥⌘K）。关掉后不注册热键，导航栏的放大镜按钮也一起隐藏。
+    @Published var quickSearchEnabled: Bool {
+        didSet {
+            userDefaults.set(quickSearchEnabled, forKey: "quick_search_enabled")
+            if quickSearchEnabled {
+                QuickSearchController.shared.start()
+            } else {
+                QuickSearchController.shared.stop()
+            }
+        }
+    }
+
     @Published var menuBarCoinMotion: MenuBarCoinMotion {
         didSet { userDefaults.set(menuBarCoinMotion.rawValue, forKey: "menubar_coin_motion") }
     }
@@ -228,6 +240,7 @@ class AppSettings: ObservableObject {
         self.showBattery = userDefaults.object(forKey: "monitor_battery") as? Bool ?? true
         self.showNetwork = userDefaults.object(forKey: "monitor_network") as? Bool ?? true
         self.showUptime = userDefaults.object(forKey: "monitor_uptime") as? Bool ?? true
+        self.quickSearchEnabled = userDefaults.object(forKey: "quick_search_enabled") as? Bool ?? true
         self.showTemperature = userDefaults.object(forKey: "monitor_temperature") as? Bool ?? true
         self.showProcesses = userDefaults.object(forKey: "monitor_processes") as? Bool ?? true
         self.mergeProcesses = userDefaults.object(forKey: "monitor_process_merge") as? Bool ?? true

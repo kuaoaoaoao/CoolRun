@@ -42,22 +42,25 @@ struct MenuBarMonitorView: View {
     var body: some View {
         VStack(spacing: 0) {
             ModuleNavigationRail(selection: $viewMode, todayAttention: todayAttention) {
-                Button {
-                    QuickSearchController.shared.show()
-                } label: {
+                // 统一搜索关掉后，这个放大镜也不留 —— 留着就是个点了没反应的按钮。
+                if settings.quickSearchEnabled {
+                    Button {
+                        QuickSearchController.shared.show()
+                    } label: {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary(colorScheme))
                         .hitTarget(width: 30, height: 34)
                 }
-                .buttonStyle(PressableButtonStyle(scale: 0.88, reduceMotion: reduceMotion))
-                .help(LocalizedString.l(
-                    settings.language,
-                    en: "Search everything (⌥⌘K)",
-                    zh: "搜索全部（⌥⌘K）",
-                    ja: "すべて検索（⌥⌘K）",
-                    ko: "전체 검색 (⌥⌘K)"
-                ))
+                    .buttonStyle(PressableButtonStyle(scale: 0.88, reduceMotion: reduceMotion))
+                    .help(LocalizedString.l(
+                        settings.language,
+                        en: "Search everything (⌥⌘K)",
+                        zh: "搜索全部（⌥⌘K）",
+                        ja: "すべて検索（⌥⌘K）",
+                        ko: "전체 검색 (⌥⌘K)"
+                    ))
+                }
 
                 Button {
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {

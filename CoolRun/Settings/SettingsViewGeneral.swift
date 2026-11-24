@@ -98,6 +98,18 @@ extension SettingsView {
             }
 
             SettingsCard(
+                icon: "magnifyingglass",
+                title: LocalizedString.settings("quick_search"),
+                description: LocalizedString.settings("quick_search_desc")
+            ) {
+                MonitorToggleRow(
+                    icon: "command",
+                    title: LocalizedString.settings("quick_search_toggle"),
+                    isOn: $settings.quickSearchEnabled
+                )
+            }
+
+            SettingsCard(
                 icon: "doc.on.clipboard.fill",
                 title: LocalizedString.settings("clipboard_quick_paste"),
                 description: LocalizedString.settings("clipboard_quick_paste_desc")

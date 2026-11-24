@@ -126,7 +126,20 @@ final class QuickSearchController {
     // MARK: 热键
 
     func start() {
+        guard AppSettings.shared.quickSearchEnabled else {
+            stop()
+            return
+        }
         registerHotKey()
+    }
+
+    /// 关掉统一搜索：注销热键、收起面板。设置里关开关时调用。
+    func stop() {
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            self.hotKeyRef = nil
+        }
+        hide()
     }
 
     private func registerHotKey() {
