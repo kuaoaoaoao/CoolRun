@@ -75,13 +75,12 @@ struct AgentRecipe: Identifiable, Codable, Sendable {
 | --- | --- | --- |
 | 电脑体检 | 卡片 | system_snapshot / system_processes / system_battery / system_network |
 | 金价快报 | 卡片 | gold_price / gold_signals |
-| 今天有什么 | 卡片 | calendar_upcoming / english_daily / quota_status |
+| 今天有什么 | 卡片 | calendar_upcoming / english_daily |
 | 帮我记一笔 | 卡片（带输入框） | notes_create |
 | 谁在吃内存 | 卡片 | system_processes(sort_by=memory) |
 | 电池还行吗 | 卡片 | system_battery / system_snapshot |
 | 剪贴板找东西 | 卡片（带输入框） | clipboard_search |
 | 提醒我一下 | 卡片（带输入框） | reminder_create |
-| 额度还剩多少 | 卡片 | quota_status |
 | 电脑最近怎么样 | 卡片 | system_snapshot + 历史趋势（需新增 system_history 工具） |
 | 截图存哪了 | 卡片 | screenshot |
 | 切到金价 | 卡片 | ui_switch_panel |
@@ -97,7 +96,7 @@ struct AgentRecipe: Identifiable, Codable, Sendable {
 
 给"想手动玩"的用户一个入口：设置面板 → "工具" 页。
 
-- 按模块分组（系统 / 金价 / 日程 / 学习 / 额度 / 笔记 / 剪贴板 / 界面 / 通知 / 截图）
+- 按模块分组（系统 / 金价 / 日程 / 学习 / 笔记 / 剪贴板 / 界面 / 通知 / 截图）
 - 每行显示：名称、一句话说明、权限徽章（L0 绿 / L1 蓝 / L2 橙 / L3 红）
 - 点开 → 根据 `ToolDescriptor.parameters`（本身就是 JSON Schema）**自动生成参数表单**：string → TextField，integer → Stepper，boolean → Toggle，enum → Picker
 - 底部"运行"按钮 → 直接 `ToolRegistry.shared.execute()` → 结果用同一套结果卡片渲染

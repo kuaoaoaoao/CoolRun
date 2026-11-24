@@ -27,7 +27,6 @@ struct TodaySummaryItem: Identifiable, Equatable, Sendable {
         case birthday
         case gold
         case english
-        case aiQuota
     }
 
     let id: String
@@ -47,9 +46,7 @@ enum TodaySummaryBuilder {
         settings: AppSettings,
         progressStore: EnglishProgressStore,
         goldStore: GoldPriceStore,
-        tradeStore: GoldTradeStore,
-        codexModel: CodexMonitorViewModel,
-        claudeModel: ClaudeMonitorViewModel
+        tradeStore: GoldTradeStore
     ) -> [TodaySummaryItem] {
         build(
             snapshot: snapshot,
@@ -58,8 +55,6 @@ enum TodaySummaryBuilder {
             english: progressStore.summary(dailyTarget: settings.englishDailyTarget),
             goldPrice: goldStore.latestQuote?.cnyPerGram ?? goldStore.records.last?.price,
             goldHolding: GoldTradeStore.holdingSummary(records: tradeStore.records),
-            codexRemaining: minimumCodexRemaining(from: codexModel.state),
-            claudeRemaining: minimumClaudeRemaining(from: claudeModel.state),
             language: settings.language
         )
     }
@@ -75,8 +70,6 @@ enum TodaySummaryBuilder {
         english: EnglishDailySummary,
         goldPrice: Double?,
         goldHolding: (grams: Double, averageCost: Double),
-        codexRemaining: Int?,
-        claudeRemaining: Int?,
         language: AppLanguage,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -167,20 +160,6 @@ enum TodaySummaryBuilder {
             dueDate: calendar.date(bySettingHour: 23, minute: 59, second: 0, of: now)
         ))
 
-        if let remaining = [codexRemaining, claudeRemaining].compactMap({ $0 }).min() {
-            let severity: TodaySeverity = remaining <= 10 ? .critical : remaining <= 25 ? .warning : .normal
-            items.append(TodaySummaryItem(
-                id: "ai-quota",
-                kind: .aiQuota,
-                severity: severity,
-                icon: "sparkles",
-                title: LocalizedString.l(language, en: "AI quota", zh: "AI 额度", ja: "AI クォータ", ko: "AI 할당량"),
-                detail: LocalizedString.l(language, en: "Tightest window \(remaining)% left", zh: "最紧张窗口剩余 \(remaining)%", ja: "最小残量 \(remaining)%", ko: "최소 잔여량 \(remaining)%"),
-                destination: .codex,
-                dueDate: nil
-            ))
-        }
-
         return sorted(items)
     }
 
@@ -250,15 +229,6 @@ enum TodaySummaryBuilder {
         }.min(by: { $0.days < $1.days })
     }
 
-    private static func minimumCodexRemaining(from state: CodexMonitorState) -> Int? {
-        guard case let .ready(snapshot) = state else { return nil }
-        return snapshot.limits.flatMap(\.windows).compactMap(\.remainingPercent).min()
-    }
-
-    private static func minimumClaudeRemaining(from state: ClaudeMonitorState) -> Int? {
-        guard case let .ready(snapshot) = state else { return nil }
-        return snapshot.windows.compactMap(\.remainingPercent).min()
-    }
 }
 
 struct TodayOverviewView: View {
@@ -269,8 +239,6 @@ struct TodayOverviewView: View {
     @ObservedObject private var router = AppNavigationRouter.shared
     @State private var goldStore = GoldPriceStore.shared
     @State private var tradeStore = GoldTradeStore.shared
-    @State private var codexModel = CodexMonitorViewModel.shared
-    @State private var claudeModel = ClaudeMonitorViewModel.shared
     @Environment(\.colorScheme) private var colorScheme
 
     private var items: [TodaySummaryItem] {
@@ -279,9 +247,7 @@ struct TodayOverviewView: View {
             settings: settings,
             progressStore: progressStore,
             goldStore: goldStore,
-            tradeStore: tradeStore,
-            codexModel: codexModel,
-            claudeModel: claudeModel
+            tradeStore: tradeStore
         )
     }
 

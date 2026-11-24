@@ -6,13 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CoolRun is a macOS menu bar utility that consolidates multiple everyday productivity tools into a single lightweight popover panel. It runs as a menu bar-only app (no Dock icon by default).
 
-**Current modules (10):**
+**Current modules (9):**
 - **Today** — Prioritized overview aggregating urgency from all modules
 - **System Monitor** — CPU, memory, storage, battery, network, temperature, uptime, process ranking
 - **Gold Price** — Real-time Chinese gold price (CZB accumulation gold), technical indicators, trading signals, portfolio P&L
 - **Calendar** — Calendar with lunar calendar, Chinese holidays, birthdays, countdowns
 - **English Learning** — Graded vocabulary with TTS, progress tracking
-- **AI Quota** — Codex and Claude Code usage limits monitoring
 - **AI Assistant** — LLM-powered conversational assistant for system/gold/AI queries (NEW)
 - **Notes** — Local grouped notes with search and pinning
 - **Clipboard** — Local clipboard history with search and quick-paste
@@ -45,7 +44,7 @@ The app uses SwiftUI with an `NSApplicationDelegateAdaptor` pattern to bridge Ap
 
 - `App/CoolRunApp.swift` — Entry point. Registers `MacAppDelegate` on macOS.
 - `App/MacAppDelegate.swift` — Core orchestrator. Manages `NSStatusItem`, popover panels (size per module), coin icon animation, gold price polling.
-- `App/ContentView.swift` — Module navigation rail + content area. Defines `ViewMode` enum (10 modules) and each module's panel size.
+- `App/ContentView.swift` — Module navigation rail + content area. Defines `ViewMode` enum (9 modules) and each module's panel size.
 - `Core/AppTheme.swift` — Shared theme colors + `appCardSurface()` modifier.
 - `Modules/Monitor/` — `MonitorPanel` / `MonitorSections` / `ProcessAndDeviceSections` / `MonitorComponents`.
 - `Modules/Monitor/SystemSampler.swift` — Raw system data collection using Mach kernel APIs.
@@ -84,7 +83,6 @@ CoolRun/
 │   ├── Gold/            gold price, analysis, forecasting, trade ledger
 │   ├── Calendar/        calendar, birthdays, countdowns
 │   ├── English/         learning, textbooks, vocabulary
-│   ├── AIQuota/         Codex / Claude quota monitors
 │   ├── Assistant/       LLM chat + provider configuration
 │   ├── Notes/           notes store + view
 │   ├── Clipboard/       clipboard history + quick paste

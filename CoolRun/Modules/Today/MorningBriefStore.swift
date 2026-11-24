@@ -93,8 +93,6 @@ final class MorningBriefStore {
             birthday: nextBirthday(),
             englishDone: english.learnedCount,
             englishTarget: english.dailyTarget,
-            codexRemaining: minimumCodexRemaining(),
-            claudeRemaining: minimumClaudeRemaining(),
             language: language
         )
 
@@ -266,16 +264,6 @@ final class MorningBriefStore {
             }
             return nil
         }.min(by: { $0.1 < $1.1 })
-    }
-
-    private func minimumCodexRemaining() -> Int? {
-        guard case let .ready(snapshot) = CodexMonitorViewModel.shared.state else { return nil }
-        return snapshot.limits.flatMap(\.windows).compactMap(\.remainingPercent).min()
-    }
-
-    private func minimumClaudeRemaining() -> Int? {
-        guard case let .ready(snapshot) = ClaudeMonitorViewModel.shared.state else { return nil }
-        return snapshot.windows.compactMap(\.remainingPercent).min()
     }
 
     // MARK: 缓存

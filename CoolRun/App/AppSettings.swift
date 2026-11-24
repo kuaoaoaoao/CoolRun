@@ -87,11 +87,6 @@ class AppSettings: ObservableObject {
         didSet { userDefaults.set(goldAlertLowerText, forKey: "gold_alert_lower") }
     }
 
-    // AI 额度提醒：默认关闭，只有用户主动开启后才请求通知权限。
-    @Published var aiQuotaAlertEnabled: Bool {
-        didSet { userDefaults.set(aiQuotaAlertEnabled, forKey: "ai_quota_alert_enabled") }
-    }
-
     // 隐私设置
     @Published var analyticsEnabled: Bool {
         didSet {
@@ -259,7 +254,6 @@ class AppSettings: ObservableObject {
         self.goldAlertEnabled = userDefaults.object(forKey: "gold_alert_enabled") as? Bool ?? false
         self.goldAlertUpperText = userDefaults.string(forKey: "gold_alert_upper") ?? ""
         self.goldAlertLowerText = userDefaults.string(forKey: "gold_alert_lower") ?? ""
-        self.aiQuotaAlertEnabled = userDefaults.object(forKey: "ai_quota_alert_enabled") as? Bool ?? false
 
         // 新安装和源码 fork 默认不发送遥测；已有用户的明确选择保持不变。
         self.analyticsEnabled = userDefaults.object(forKey: "analytics_enabled") as? Bool ?? false

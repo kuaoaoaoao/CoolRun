@@ -169,7 +169,6 @@ final class CountdownModelTests: XCTestCase {
 
         XCTAssertEqual(archive.version, 1)
         XCTAssertNil(archive.countdownEvents)
-        XCTAssertNil(archive.appSettings?.aiQuotaAlertEnabled)
         XCTAssertNil(archive.appSettings?.goldHoldingGramsText)
     }
 

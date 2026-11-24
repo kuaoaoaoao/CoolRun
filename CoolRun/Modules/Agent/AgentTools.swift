@@ -16,7 +16,6 @@ enum AgentTools {
         AgentGoldTools.registerAll()
         registerCalendarTools()
         registerEnglishTools()
-        registerQuotaTools()
         registerNotesTools()
         registerClipboardTools()
     }
@@ -347,85 +346,6 @@ enum AgentTools {
                 "word_of_the_day": describe(word),
                 "quote_of_the_day": describe(quote),
             ]).prettyJSONString())
-        }
-    }
-
-    // MARK: - AI 额度
-
-    private static func registerQuotaTools() {
-        ToolRegistry.shared.register(ToolDescriptor(
-            name: "quota_status",
-            summary: "读取 Codex 与 Claude 的剩余额度窗口与重置时间。",
-            parameters: ToolSchema.object(properties: [
-                ("refresh", ToolSchema.boolean("为 true 时先强制刷新一次，默认 false")),
-            ]),
-            permission: .read
-        )) { arguments in
-            let shouldRefresh = arguments["refresh"]?.boolValue ?? false
-
-            let codexViewModel = CodexMonitorViewModel.shared
-            let claudeViewModel = ClaudeMonitorViewModel.shared
-
-            if shouldRefresh {
-                await codexViewModel.refresh()
-                await claudeViewModel.refresh()
-            }
-
-            var payload: [String: JSONValue] = [:]
-
-            switch codexViewModel.state {
-            case .loading:
-                payload["codex"] = .string("读取中（可在 AI 额度面板打开后自动刷新）")
-            case .unavailable(let message), .notLoggedIn(let message):
-                payload["codex"] = .string(message)
-            case .ready(let snapshot):
-                let windows = snapshot.limits.flatMap { limit in
-                    limit.windows.map { window -> JSONValue in
-                        var item: [String: JSONValue] = [
-                            "title": .string("\(limit.title) \(window.title)"),
-                            "remaining_percent": .number(Double(window.remainingPercent ?? -1)),
-                            "duration": .string(window.durationText),
-                        ]
-                        if let resetsAt = window.resetsAt {
-                            item["resets_at"] = .string(iso(resetsAt))
-                        }
-                        return .object(item)
-                    }
-                }
-                payload["codex"] = .object([
-                    "account": .string(snapshot.account),
-                    "plan": .string(snapshot.plan ?? "unknown"),
-                    "windows": .array(windows),
-                    "updated_at": .string(iso(snapshot.updatedAt)),
-                ])
-            }
-
-            switch claudeViewModel.state {
-            case .loading:
-                payload["claude"] = .string("读取中（可在 AI 额度面板打开后自动刷新）")
-            case .unavailable(let message), .notLoggedIn(let message):
-                payload["claude"] = .string(message)
-            case .ready(let snapshot):
-                let windows = snapshot.windows.map { window -> JSONValue in
-                    var item: [String: JSONValue] = [
-                        "title": .string(window.title),
-                        "remaining_percent": .number(Double(window.remainingPercent ?? -1)),
-                        "duration": .string(window.durationText),
-                    ]
-                    if let resetsAt = window.resetsAt {
-                        item["resets_at"] = .string(iso(resetsAt))
-                    }
-                    return .object(item)
-                }
-                payload["claude"] = .object([
-                    "account": .string(snapshot.account),
-                    "plan": .string(snapshot.plan ?? "unknown"),
-                    "windows": .array(windows),
-                    "updated_at": .string(iso(snapshot.updatedAt)),
-                ])
-            }
-
-            return .text(JSONValue.object(payload).prettyJSONString())
         }
     }
 

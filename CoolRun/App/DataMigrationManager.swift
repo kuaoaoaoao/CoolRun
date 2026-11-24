@@ -219,7 +219,6 @@ final class DataMigrationManager {
             englishDailyTarget: s.englishDailyTarget,
             englishShowTranslation: s.englishShowTranslation,
             englishSpeakTranslation: s.englishSpeakTranslation,
-            aiQuotaAlertEnabled: s.aiQuotaAlertEnabled,
             goldHoldingGramsText: UserDefaults.standard.string(forKey: "goldHoldingGramsText"),
             goldHoldingAverageCostText: UserDefaults.standard.string(forKey: "goldHoldingAverageCostText"),
             visibleTabs: s.visibleTabRaws.sorted()
@@ -244,9 +243,6 @@ final class DataMigrationManager {
         s.englishDailyTarget = data.englishDailyTarget
         s.englishShowTranslation = data.englishShowTranslation
         s.englishSpeakTranslation = data.englishSpeakTranslation
-        if let enabled = data.aiQuotaAlertEnabled {
-            s.aiQuotaAlertEnabled = enabled
-        }
         if let grams = data.goldHoldingGramsText {
             UserDefaults.standard.set(grams, forKey: "goldHoldingGramsText")
         }
@@ -380,7 +376,6 @@ struct SettingsData: Codable {
     let englishShowTranslation: Bool
     let englishSpeakTranslation: Bool
     // v2 追加字段均为可选，旧备份可继续解码。
-    let aiQuotaAlertEnabled: Bool?
     let goldHoldingGramsText: String?
     let goldHoldingAverageCostText: String?
     // v4 追加：面板模块显隐配置（可选，兼容旧档案）

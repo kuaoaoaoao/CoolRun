@@ -613,10 +613,6 @@ struct MenuBarDisplayRow: View {
             return LocalizedString.l(settings.language, en: "Live download and upload speed", zh: "实时显示下载和上传速度", ja: "ダウンロードとアップロード速度をリアルタイム表示", ko: "실시간 다운로드 및 업로드 속도")
         case .english:
             return LocalizedString.l(settings.language, en: "Current word or spoken sentence", zh: "显示当前单词或正在朗读的句子", ja: "現在の単語または読み上げ中の文を表示", ko: "현재 단어나 읽는 문장 표시")
-        case .codex:
-            return LocalizedString.l(settings.language, en: "Codex quota remaining", zh: "显示 Codex 剩余额度", ja: "Codex の残り使用量を表示", ko: "Codex 잔여 사용량 표시")
-        case .claude:
-            return LocalizedString.l(settings.language, en: "Claude Code quota remaining", zh: "显示 Claude 剩余额度", ja: "Claude の残り使用量を表示", ko: "Claude 잔여 사용량 표시")
         case .countdown:
             return LocalizedString.l(settings.language, en: "Nearest countdown event", zh: "显示最近的倒数日", ja: "直近のカウントダウンを表示", ko: "가장 가까운 카운트다운 표시")
         }

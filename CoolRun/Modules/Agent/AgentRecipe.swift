@@ -113,13 +113,13 @@ extension AgentRecipe {
         AgentRecipe(
             id: "today-brief",
             title: "今天有什么",
-            subtitle: "日程、倒计时、每日英语和额度",
+            subtitle: "日程、倒计时和每日英语",
             symbol: "sun.max",
             prompt: """
-            帮我梳理一下今天：有哪些临近的日程和倒计时、今天的英语单词是什么、\
-            Codex 和 Claude 的额度还剩多少。用清单形式回答，尽量短。
+            帮我梳理一下今天：有哪些临近的日程和倒计时、今天的英语单词是什么。\
+            用清单形式回答，尽量短。
             """,
-            requiredTools: ["calendar_upcoming", "english_daily", "quota_status"],
+            requiredTools: ["calendar_upcoming", "english_daily"],
             slash: "今天"
         ),
         AgentRecipe(
@@ -191,18 +191,6 @@ extension AgentRecipe {
             minimumLevel: .persistent,
             inputHint: "例如：30分钟后 喝水",
             slash: "提醒"
-        ),
-        AgentRecipe(
-            id: "quota-check",
-            title: "额度还剩多少",
-            subtitle: "Codex 和 Claude 的用量上限",
-            symbol: "gauge.with.dots.needle.50percent",
-            prompt: """
-            帮我看看 Codex 和 Claude Code 的额度还剩多少，快用完的窗口标出来，\
-            再告诉我大概什么时候重置。
-            """,
-            requiredTools: ["quota_status"],
-            slash: "额度"
         ),
         AgentRecipe(
             id: "screenshot-now",

@@ -16,7 +16,7 @@ enum CoolRunModuleIntentValue: String, AppEnum, CaseIterable {
         .gold: "Gold",
         .calendar: "Calendar",
         .english: "English",
-        .ai: "AI Quota"
+        .ai: "AI"
     ]
 
     var viewMode: ViewMode {
@@ -26,7 +26,7 @@ enum CoolRunModuleIntentValue: String, AppEnum, CaseIterable {
         case .gold: .gold
         case .calendar: .calendar
         case .english: .english
-        case .ai: .codex
+        case .ai: .aiAssistant
         }
     }
 }

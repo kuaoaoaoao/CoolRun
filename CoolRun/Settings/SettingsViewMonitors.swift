@@ -104,48 +104,6 @@ extension SettingsView {
                 .padding(.vertical, 8)
             }
 
-            SettingsCard(
-                icon: "bell.badge.fill",
-                title: LocalizedString.settings("ai_quota_alerts"),
-                description: LocalizedString.settings("ai_quota_alerts_desc")
-            ) {
-                VStack(spacing: 0) {
-                    MonitorToggleRow(
-                        icon: "sparkles",
-                        title: LocalizedString.settings("ai_quota_alerts"),
-                        isOn: $settings.aiQuotaAlertEnabled
-                    )
-                    .onChange(of: settings.aiQuotaAlertEnabled) { _, enabled in
-                        if enabled {
-                            QuotaAlertManager.shared.requestAuthorizationIfNeeded {
-                                refreshNotificationPermission()
-                            }
-                        }
-                    }
-                    .onAppear { refreshNotificationPermission() }
-
-                    if settings.aiQuotaAlertEnabled && notificationPermissionDenied {
-                        Divider().padding(.horizontal, 14)
-                        Label(
-                            LocalizedString.settings("notification_permission_denied"),
-                            systemImage: "exclamationmark.triangle.fill"
-                        )
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppTheme.warning)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                    }
-
-                    Divider().padding(.horizontal, 14)
-                    Text(LocalizedString.settings("ai_quota_alerts_note"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                }
-            }
         }
     }
 }

@@ -10,8 +10,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     private let popover = NSPopover()
     private let contextPopover = NSPopover()
     private let viewModel = SystemMonitorViewModel()
-    private let codexViewModel = CodexMonitorViewModel.shared
-    private let claudeViewModel = ClaudeMonitorViewModel.shared
     private let goldPriceService = GoldPriceService()
     private let settings = AppSettings.shared
     private let englishLearning = EnglishLearningManager.shared
@@ -101,8 +99,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
                     self?.contextPopover.performClose(nil)
                     Task { @MainActor in
                         await self?.refreshGoldPriceNow()
-                        await self?.codexViewModel.refresh()
-                        await self?.claudeViewModel.refresh()
                     }
                 },
                 toggleEnglishPlayback: { [weak self] in
@@ -338,8 +334,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         NotificationCenter.default.removeObserver(self, name: .coolRunPresentNavigationRequest, object: nil)
         NotificationCenter.default.removeObserver(self, name: .coolRunRefreshGold, object: nil)
         viewModel.stop()
-        codexViewModel.stop()
-        claudeViewModel.stop()
     }
 
     @objc private func handleStatusItemClick() {
@@ -379,10 +373,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
     }
 
     private func presentMonitorPopover(relativeTo button: NSStatusBarButton) {
-        if AppNavigationRouter.shared.request?.mode == .codex || settings.lastViewModeRaw == ViewMode.codex.rawValue {
-            codexViewModel.start()
-            claudeViewModel.start()
-        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         Analytics.capture(.popoverOpened)
         installKeyboardShortcuts()
@@ -469,9 +459,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
 
         guard closedPopover === popover else { return }
 
-        // NSPopover 会保留 hosting controller；显式停止，避免关闭后仍轮询 AI 接口。
-        codexViewModel.stop()
-        claudeViewModel.stop()
         // 面板关了就别再查磁盘容量和 SMC 温度了——这两项是常驻 CPU 的大头。
         viewModel.scope = .light
 
@@ -678,10 +665,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         case .english:
             let playback = englishLearning.state == .playing ? " ▶" : ""
             return compactStatusText(englishLearning.menuBarText, limit: compact ? 8 : 12) + playback
-        case .codex:
-            return compact ? compactStatusText(codexMenuBarText.replacingOccurrences(of: "Codex", with: "Cx"), limit: 10) : codexMenuBarText
-        case .claude:
-            return compact ? compactStatusText(claudeMenuBarText.replacingOccurrences(of: "Claude", with: "Cl"), limit: 10) : claudeMenuBarText
         case .countdown:
             return compactStatusText(countdownMenuBarText, limit: compact ? 8 : 14)
         }
@@ -737,7 +720,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         case .cpu, .memory: return 8
         case .network: return 14
         case .english: return 14
-        case .codex, .claude: return 18
         case .countdown: return 14
         }
     }
@@ -772,7 +754,6 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         case .cpu, .memory: return 64
         case .network: return 104
         case .english: return 84
-        case .codex, .claude: return 68
         case .countdown: return 68
         }
     }
@@ -785,34 +766,8 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, 
         case .cpu, .memory: return 78
         case .network: return 124
         case .english: return 130
-        case .codex, .claude: return 138
         case .countdown: return 120
         }
-    }
-
-    private var codexMenuBarText: String {
-        guard case let .ready(snapshot) = codexViewModel.state,
-              let window = snapshot.limits.first?.windows.first,
-              let remaining = window.remainingPercent else {
-            return "Codex"
-        }
-        return "Codex \(quotaMeterText(remaining)) \(remaining)%"
-    }
-
-    private var claudeMenuBarText: String {
-        guard case let .ready(snapshot) = claudeViewModel.state,
-              let window = snapshot.windows.first,
-              let remaining = window.remainingPercent else {
-            return "Claude"
-        }
-        return "Claude \(quotaMeterText(remaining)) \(remaining)%"
-    }
-
-    // 字符版迷你用量条，例如 ▰▰▰▱▱
-    private func quotaMeterText(_ remainingPercent: Int) -> String {
-        let segments = 5
-        let filled = max(0, min(segments, Int((Double(remainingPercent) / 100 * Double(segments)).rounded())))
-        return String(repeating: "▰", count: filled) + String(repeating: "▱", count: segments - filled)
     }
 
     private var countdownMenuBarText: String {

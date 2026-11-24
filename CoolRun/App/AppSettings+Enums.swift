@@ -32,8 +32,6 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
     case memory = "memory"
     case network = "network"
     case english = "english"
-    case codex = "codex"
-    case claude = "claude"
     case countdown = "countdown"
 
     var id: String { rawValue }
@@ -53,10 +51,6 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
             return LocalizedString.l(currentLang, en: "Network Speed", zh: "实时网速", ja: "ネットワーク速度", ko: "네트워크 속도")
         case .english:
             return LocalizedString.l(currentLang, en: "English Learning", zh: "英语学习", ja: "英語学習", ko: "영어 학습")
-        case .codex:
-            return "Codex"
-        case .claude:
-            return "Claude"
         case .countdown:
             return LocalizedString.l(currentLang, en: "Countdown", zh: "倒数日", ja: "カウントダウン", ko: "카운트다운")
         }
@@ -70,8 +64,6 @@ enum MenuBarDisplayMode: String, CaseIterable, Identifiable {
         case .memory: return "memorychip"
         case .network: return "arrow.up.arrow.down.circle"
         case .english: return "character.book.closed"
-        case .codex: return "terminal"
-        case .claude: return "sparkles"
         case .countdown: return "timer"
         }
     }

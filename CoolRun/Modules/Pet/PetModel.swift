@@ -709,8 +709,6 @@ final class PetModel {
             LocalizedString.l(lang, en: "Checking calendar", zh: "翻日程", ja: "予定を確認", ko: "일정 확인")
         case "english_daily":
             LocalizedString.l(lang, en: "Today's English", zh: "备今日英语", ja: "今日の英語を準備", ko: "오늘의 영어 준비")
-        case "quota_status":
-            LocalizedString.l(lang, en: "Checking quota", zh: "查额度", ja: "クォータ確認", ko: "할당량 확인")
         case "notes_search":
             LocalizedString.l(lang, en: "Searching notes", zh: "翻笔记", ja: "メモを検索", ko: "메모 검색")
         case "notes_create":

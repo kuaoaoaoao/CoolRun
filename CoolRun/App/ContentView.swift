@@ -11,7 +11,6 @@ enum ViewMode: String, CaseIterable, Sendable {
     case gold
     case calendar
     case english
-    case codex
     case notes
     case clipboard
     case diagnostics
@@ -24,7 +23,6 @@ enum ViewMode: String, CaseIterable, Sendable {
         case .gold: return "chart.line.uptrend.xyaxis"
         case .calendar: return "calendar"
         case .english: return "character.book.closed"
-        case .codex: return "sparkles"
         case .notes: return "note.text"
         case .clipboard: return "doc.on.clipboard"
         case .diagnostics: return "stethoscope"
@@ -39,7 +37,6 @@ enum ViewMode: String, CaseIterable, Sendable {
         case .gold: return LocalizedString.goldPrice("gold_price")
         case .calendar: return LocalizedString.calendar("calendar")
         case .english: return LocalizedString.english("english")
-        case .codex: return "Codex"
         case .notes: return LocalizedString.l(AppSettings.shared.language, en: "Notes", zh: "备忘录", ja: "メモ", ko: "메모")
         case .clipboard: return LocalizedString.l(AppSettings.shared.language, en: "Clipboard", zh: "剪切板", ja: "クリップボード", ko: "클립보드")
         case .diagnostics: return LocalizedString.l(AppSettings.shared.language, en: "Diagnostics", zh: "诊断", ja: "診断", ko: "진단")
@@ -54,7 +51,6 @@ enum ViewMode: String, CaseIterable, Sendable {
         case .gold: return "2"
         case .calendar: return "3"
         case .english: return "4"
-        case .codex: return "5"
         case .notes: return "6"
         case .clipboard: return "7"
         case .diagnostics: return "8"
@@ -111,8 +107,6 @@ struct ContentView: View {
     @ObservedObject private var progressStore = EnglishProgressStore.shared
     @State private var goldStore = GoldPriceStore.shared
     @State private var tradeStore = GoldTradeStore.shared
-    @State private var codexModel = CodexMonitorViewModel.shared
-    @State private var claudeModel = ClaudeMonitorViewModel.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -139,8 +133,6 @@ struct ContentView: View {
                     CalendarView()
                 case .english:
                     EnglishLearningView()
-                case .codex:
-                    AIMonitorView()
                 case .notes:
                     NotesView()
                 case .clipboard:
@@ -195,9 +187,7 @@ struct ContentView: View {
             settings: settings,
             progressStore: progressStore,
             goldStore: goldStore,
-            tradeStore: tradeStore,
-            codexModel: codexModel,
-            claudeModel: claudeModel
+            tradeStore: tradeStore
         ))
     }
 }

@@ -24,8 +24,6 @@ struct MenuBarMonitorView: View {
     @ObservedObject private var progressStore = EnglishProgressStore.shared
     @State private var goldStore = GoldPriceStore.shared
     @State private var tradeStore = GoldTradeStore.shared
-    @State private var codexModel = CodexMonitorViewModel.shared
-    @State private var claudeModel = ClaudeMonitorViewModel.shared
     /// 通过 GeometryReader 测量到的内容实际尺寸，用于 popover 高度自适应。
     @State private var measuredContentSize: CGSize = .zero
 
@@ -102,8 +100,6 @@ struct MenuBarMonitorView: View {
                     CalendarView()
                 case .english:
                     EnglishLearningView()
-                case .codex:
-                    AIMonitorView()
                 case .notes:
                     NotesView()
                 case .clipboard:
@@ -188,9 +184,7 @@ struct MenuBarMonitorView: View {
             settings: settings,
             progressStore: progressStore,
             goldStore: goldStore,
-            tradeStore: tradeStore,
-            codexModel: codexModel,
-            claudeModel: claudeModel
+            tradeStore: tradeStore
         ))
     }
 }

@@ -93,8 +93,6 @@ enum MorningBriefBuilder {
         birthday: (name: String, days: Int)?,
         englishDone: Int,
         englishTarget: Int,
-        codexRemaining: Int?,
-        claudeRemaining: Int?,
         language: AppLanguage,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -164,17 +162,6 @@ enum MorningBriefBuilder {
                     destination: .english
                 ))
             }
-        }
-
-        if let lowest = [codexRemaining, claudeRemaining].compactMap({ $0 }).min(), lowest <= 20 {
-            lines.append(MorningBriefLine(
-                id: "quota",
-                icon: "gauge.with.dots.needle.bottom.50percent",
-                title: LocalizedString.l(language, en: "AI quota", zh: "AI 额度", ja: "AI 枠", ko: "AI 할당량"),
-                detail: LocalizedString.l(language, en: "\(lowest)% left", zh: "只剩 \(lowest)%", ja: "残り\(lowest)%", ko: "\(lowest)% 남음"),
-                tone: lowest <= 10 ? .critical : .warning,
-                destination: .codex
-            ))
         }
 
         return MorningBrief(
